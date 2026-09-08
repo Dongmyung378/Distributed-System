@@ -1,0 +1,22 @@
+{
+    "register": {
+        "description": "Register a new user",
+        "command": "register %user%"
+    },
+    "send_all": {
+        "description": "Send message to all the users",
+        "command": "send_all %msg%"
+    },
+    "send_one": {
+        "description": "Send a message to a specific user",
+        "command": "send_to %user% %msg%"
+    },
+    "online_users": {
+        "description": "Get the list of all online users",
+        "command": "user_list"
+    },
+    "close_connection": {
+        "description": "Disconnect the current client",
+        "command": "quit"
+    }
+}
