@@ -1,64 +1,91 @@
-# Distributed System Recovery
+# Resilient Distributed Systems Lab
 
-외부 서비스와 수업용 라이브러리가 사라져 실행할 수 없었던 두 분산 시스템 실습을 독립 실행형 프로젝트로 복구한 저장소입니다.
+[한국어 문서](README.ko.md)
 
-- **Talk**: 여러 TCP 클라이언트가 접속해 전체/개인 메시지를 교환하는 채팅 시스템
-- **Hotel**: 호텔과 밴드의 공통 시간대를 조회하고 예약하는 Wedding Planner
+Two networked applications restored and modernized after their original course APIs and runtime library became unavailable. The repository demonstrates concurrent TCP messaging, an HTTP reservation service, persistent state, conflict handling, and compensating transactions using Python.
 
-두 프로젝트 모두 Windows, macOS, Linux에서 Python만으로 실행할 수 있습니다. Hotel 클라이언트가 사용하는 `requests` 외에는 별도 프레임워크가 필요하지 않습니다.
+## Why This Project Exists
 
-## 복구 내용
+These applications began as University of Manchester distributed-computing coursework. The original chat runtime was no longer bundled with the submission, and the remote hotel and band services stopped responding. The recovery work replaced those dependencies with self-contained implementations while preserving the original user-facing protocols.
+
+This is not presented as untouched coursework. It is a recovery and refactoring project focused on making legacy distributed-system exercises reproducible, testable, and safe to run locally.
+
+## Project Highlights
+
+| Area | Implementation |
+|---|---|
+| Concurrent messaging | Thread-per-connection TCP server with synchronized shared state |
+| Text protocol | Registration, broadcast, direct messaging, user discovery, and graceful disconnect |
+| HTTP services | Local Hotel and Band API compatible with the original client contract |
+| Persistence | SQLite reservation store with automatic schema and slot initialization |
+| Conflict control | Database transaction and unique constraint prevent double booking |
+| Failure recovery | Hotel reservations are compensated when the matching Band reservation fails |
+| Resilience | Request timeouts, bounded retries, status-specific exceptions, and live state reads |
+| Verification | Automated integration tests exercise both systems over real TCP and HTTP sockets |
+
+## Architecture
 
 ### Talk
 
-- 누락된 비공개 수업 라이브러리 `ex2utils` 의존성 제거
-- Python 표준 라이브러리의 `socketserver`로 멀티스레드 TCP 서버 재구현
-- 사용자 등록, 전체 메시지, 개인 메시지, 사용자 목록, 정상 종료 프로토콜 보존
-- 공유 사용자 상태에 잠금을 적용하고 메시지 전송을 `sendall` 방식으로 변경
+```mermaid
+flowchart LR
+    A[Chat Client: Alice] -->|newline-delimited TCP| S[Threaded Chat Server]
+    B[Chat Client: Bob] -->|newline-delimited TCP| S
+    C[Additional Clients] -->|newline-delimited TCP| S
+    S --> L[Lock-protected connection and username registry]
+    S -->|broadcast or direct message| A
+    S -->|broadcast or direct message| B
+    S -->|broadcast or direct message| C
+```
 
-### Hotel
+Every connection is handled by an independent server thread. A re-entrant lock protects registration and connection state, while each client handler serializes writes to its socket.
 
-- 종료된 학교 Hotel/Band API와 호환되는 로컬 HTTP API 구현
-- SQLite를 이용한 예약 데이터 영속 저장
-- 트랜잭션과 유일성 제약으로 동시 중복 예약 방지
-- 사용자별 서비스당 최대 2개 예약 제한 구현
-- API timeout, 제한적 재시도, 오류 응답 매핑 추가
-- 오래된 캐시 및 중복 메뉴 코드 제거
-- 호텔 예약 후 밴드 예약이 실패하면 호텔 예약을 해제하는 보상 트랜잭션 유지
+### Hotel Wedding Planner
 
-## 프로젝트 구조
+```mermaid
+flowchart LR
+    CLI[Wedding Planner CLI] -->|ReservationApi + Bearer token| H[Hotel HTTP endpoints]
+    CLI -->|ReservationApi + Bearer token| B[Band HTTP endpoints]
+    H --> API[Local threaded reservation server]
+    B --> API
+    API -->|transactional reads and writes| DB[(SQLite)]
+    CLI -. rollback hotel reservation .-> H
+```
+
+Hotel and Band are separate resources exposed by one local HTTP process. SQLite provides persistent state and serializes competing writes. The CLI coordinates the two independent resources with a compensating action rather than pretending they share one atomic transaction.
+
+## Repository Layout
 
 ```text
 Distributed-System/
 ├── Hotel/
-│   ├── api.ini             # 로컬 API 및 클라이언트 설정
-│   ├── booking.py          # Wedding Planner CLI
-│   ├── exceptions.py       # API 오류 타입
-│   ├── local_api.py        # Hotel/Band 로컬 HTTP API
-│   └── reservationapi.py   # 재시도 기능이 있는 HTTP 클라이언트
+│   ├── api.ini             # Local API, tokens, retries, and database settings
+│   ├── booking.py          # Interactive Wedding Planner
+│   ├── exceptions.py       # Status-specific client exceptions
+│   ├── local_api.py        # Threaded Hotel/Band HTTP service
+│   └── reservationapi.py   # Retrying HTTP client
 ├── Talk/
-│   ├── commands.json       # 채팅 프로토콜 명세
-│   ├── myclient.py         # TCP 채팅 클라이언트
-│   └── myserver.py         # 멀티스레드 TCP 채팅 서버
-├── tests/                  # 자동 통합 테스트
+│   ├── commands.json       # Chat protocol examples
+│   ├── myclient.py         # Interactive TCP chat client
+│   └── myserver.py         # Concurrent TCP chat server
+├── tests/
+│   ├── test_hotel.py       # HTTP and planner integration tests
+│   └── test_talk.py        # TCP protocol integration tests
+├── .github/workflows/ci.yml # Cross-platform continuous integration
+├── requirements-dev.txt
 ├── requirements.txt
-└── README.md
+└── README.ko.md
 ```
 
-## 요구 사항
+## Requirements
 
-- Python 3.10 이상
-- 로컬에서 사용할 수 있는 TCP 포트 `8090` 및 HTTP 포트 `8081`
+- Python 3.10 or newer
+- Local TCP port `8090` for Talk
+- Local HTTP port `8081` for Hotel
 
-버전을 확인합니다.
+## Installation
 
-```powershell
-python --version
-```
-
-## 설치
-
-저장소 루트에서 가상 환경을 만들고 의존성을 설치합니다.
+Clone the repository, create a virtual environment, and install the single runtime dependency.
 
 ### Windows PowerShell
 
@@ -69,7 +96,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-PowerShell 실행 정책 때문에 활성화가 막히면 가상 환경의 Python을 직접 사용할 수 있습니다.
+If PowerShell prevents environment activation, call its interpreter directly:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -84,105 +111,98 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-## Talk 사용법
+## Running Talk
 
-### 1. 서버 실행
-
-첫 번째 터미널에서 실행합니다.
+Start the server in the first terminal:
 
 ```powershell
 python .\Talk\myserver.py
 ```
 
-기본 주소는 `127.0.0.1:8090`입니다. 다른 주소나 포트를 사용하려면 인수를 전달합니다.
-
-```powershell
-python .\Talk\myserver.py 0.0.0.0 9000
-```
-
-`0.0.0.0`으로 열면 같은 네트워크의 다른 장치가 접속할 수 있습니다. 운영체제 방화벽에서 해당 포트를 허용해야 할 수 있습니다.
-
-### 2. 클라이언트 실행
-
-두 번째 터미널에서 실행하고 화면 이름을 입력합니다.
+Start a client in a second terminal:
 
 ```powershell
 python .\Talk\myclient.py
 ```
 
-다중 사용자 테스트를 하려면 세 번째 터미널에서도 같은 명령을 실행합니다.
+Open another terminal and run the same client command to test multi-user behavior. The default endpoint is `127.0.0.1:8090`. A custom address can be passed to both programs:
 
-### 3. 채팅 명령
+```powershell
+python .\Talk\myserver.py 0.0.0.0 9000
+python .\Talk\myclient.py 127.0.0.1 9000
+```
 
-| 명령 | 설명 | 예시 |
+Opening the server on `0.0.0.0` permits LAN connections when the operating-system firewall also allows the selected port.
+
+### Talk Protocol
+
+After entering a unique screen name, use these commands:
+
+| Command | Purpose | Example |
 |---|---|---|
-| `send_all <message>` | 등록된 모든 사용자에게 전송 | `send_all Hello everyone` |
-| `send_to <user> <message>` | 특정 사용자에게 전송 | `send_to Bob Hello Bob` |
-| `user_list` | 현재 등록된 사용자 목록 | `user_list` |
-| `quit` | 서버 확인을 받은 뒤 종료 | `quit` |
+| `send_all <message>` | Send to every registered user | `send_all Hello everyone` |
+| `send_to <user> <message>` | Send to one user | `send_to Bob Hello Bob` |
+| `user_list` | List registered users | `user_list` |
+| `quit` | Disconnect after server confirmation | `quit` |
 
-화면 이름은 공백 없이 입력해야 하며 동시에 중복 등록할 수 없습니다.
+Screen names cannot contain whitespace and cannot be registered by two connected clients at the same time.
 
-## Hotel 사용법
+## Running Hotel
 
-Hotel은 API 서버와 Wedding Planner 클라이언트를 각각 실행해야 합니다.
+Hotel uses two processes: the local reservation API and the Wedding Planner client.
 
-### 1. 로컬 예약 API 실행
+### 1. Start the Reservation API
 
-첫 번째 터미널에서 실행합니다.
+In the first terminal:
 
 ```powershell
 python .\Hotel\local_api.py
 ```
 
-기본적으로 다음 리소스가 생성됩니다.
+The default setup creates:
 
-- API 주소: `http://127.0.0.1:8081`
-- 호텔 슬롯: 1~100
-- 밴드 슬롯: 1~100
-- 데이터베이스: `Hotel/data/reservations.db`
+- API server at `http://127.0.0.1:8081`
+- Hotel slots `1` through `100`
+- Band slots `1` through `100`
+- Persistent database at `Hotel/data/reservations.db`
 
-데이터베이스는 자동 생성되며 서버를 다시 시작해도 예약이 유지됩니다.
-
-처음 상태로 초기화하려면 서버를 종료한 후 실행합니다.
+Reservations survive server restarts. To reset the local data safely while the server is stopped:
 
 ```powershell
 python .\Hotel\local_api.py --reset-data
 ```
 
-임시 포트, 데이터베이스, 슬롯 개수를 지정할 수도 있습니다.
+The host, port, database path, and initial slot count can be overridden:
 
 ```powershell
 python .\Hotel\local_api.py --port 9001 --database .\Hotel\data\demo.db --slots 250
 ```
 
-포트를 바꾸면 `Hotel/api.ini`의 Hotel/Band URL도 같은 포트로 변경해야 합니다.
+When changing the port, update both service URLs in `Hotel/api.ini` as well.
 
-### 2. Wedding Planner 실행
+### 2. Start the Wedding Planner
 
-두 번째 터미널에서 실행합니다.
+In the second terminal:
 
 ```powershell
 python .\Hotel\booking.py
 ```
 
-메뉴에서 다음 기능을 사용할 수 있습니다.
+The menu supports:
 
-1. 현재 Hotel/Band 예약 조회
-2. 예약 가능한 슬롯 조회
-3. Hotel 또는 Band 수동 예약
-4. 예약 취소
-5. 두 서비스에 모두 가능한 슬롯 조회
-6. 가장 빠른 공통 슬롯 자동 예약
-7. 중복되거나 불필요한 예약 정리
+1. Viewing current Hotel and Band reservations
+2. Viewing available slots
+3. Reserving either service manually
+4. Cancelling a reservation
+5. Finding slots available from both services
+6. Reserving the earliest matching Hotel and Band slot
+7. Removing duplicate or unnecessary reservations
 
-가장 간단한 확인 방법은 메뉴 `6`을 선택한 뒤 메뉴 `1`을 선택하는 것입니다. 정상이라면 Hotel과 Band 모두 같은 슬롯 `1`이 표시됩니다.
+For a quick demonstration, select option `6`, then option `1`. A fresh database should show slot `1` held for both Hotel and Band.
 
-### 로컬 사용자 토큰
+### Local Tokens
 
-`Hotel/api.ini`에는 실행 예제를 위한 개발용 토큰 두 개가 서비스별로 등록되어 있습니다. 이것들은 실제 비밀 키가 아닙니다.
-
-클라이언트가 사용할 토큰은 다음 환경변수로 설정값을 덮어쓸 수 있습니다.
+`Hotel/api.ini` contains two demo identities per service. These values are local fixtures, not production secrets. The active client identity can be overridden with environment variables:
 
 ```powershell
 $env:HOTEL_API_KEY = "hotel-demo-user-2"
@@ -190,69 +210,89 @@ $env:BAND_API_KEY = "band-demo-user-2"
 python .\Hotel\booking.py
 ```
 
-실제 서비스와 연결할 때는 비밀 키를 Git에 커밋하지 말고 환경변수를 사용하십시오.
+Use environment variables or a secret manager for real credentials. Never commit production tokens.
 
-## Hotel API 계약
+## Hotel HTTP Contract
 
-모든 요청은 `Authorization: Bearer <token>` 헤더를 사용합니다.
+Every request requires `Authorization: Bearer <token>`.
 
-| Method | Endpoint | 설명 |
+| Method | Endpoint | Behavior |
 |---|---|---|
-| `GET` | `/{service}/api/reservation/available` | 예약 가능한 슬롯 조회 |
-| `GET` | `/{service}/api/reservation` | 현재 토큰의 예약 조회 |
-| `POST` | `/{service}/api/reservation/{id}` | 슬롯 예약 |
-| `DELETE` | `/{service}/api/reservation/{id}` | 슬롯 취소 |
+| `GET` | `/{service}/api/reservation/available` | List unreserved slots |
+| `GET` | `/{service}/api/reservation` | List slots held by the current token |
+| `POST` | `/{service}/api/reservation/{id}` | Reserve a slot |
+| `DELETE` | `/{service}/api/reservation/{id}` | Release a slot |
 
-`service`는 `hotel` 또는 `band`입니다. 주요 오류 코드는 다음과 같습니다.
+`service` is either `hotel` or `band`.
 
-| 상태 코드 | 의미 |
+| Status | Meaning |
 |---|---|
-| `400` | 잘못된 슬롯 형식 또는 요청 |
-| `401` | 토큰 누락 또는 잘못된 토큰 |
-| `403` | 존재하지 않는 슬롯 |
-| `404` | 해당 사용자가 보유하지 않은 예약 |
-| `409` | 다른 사용자가 이미 예약한 슬롯 |
-| `451` | 서비스당 최대 2개 예약 제한 초과 |
+| `400` | Malformed request or slot ID |
+| `401` | Missing or invalid token |
+| `403` | Slot does not exist |
+| `404` | Reservation is not held by this token |
+| `409` | Slot is already held by another token |
+| `451` | Two-reservation limit exceeded |
 
-## 자동 테스트
+## Reliability and Consistency Decisions
 
-서버를 별도로 실행하지 않은 상태에서 저장소 루트에서 실행합니다. 테스트가 임시 포트와 임시 데이터베이스를 자동으로 사용합니다.
+- **Bounded failure:** HTTP calls use explicit timeouts and finite retries with incremental delay.
+- **No stale client cache:** reservation views are fetched from the service for every operation.
+- **Write serialization:** `BEGIN IMMEDIATE` serializes competing SQLite reservations.
+- **Database invariant:** `(service, slot_id)` is the reservation primary key, so a slot cannot be double-booked.
+- **Compensation:** if Hotel succeeds and Band fails, the new Hotel reservation is released.
+- **Thread safety:** Talk protects its shared client registry and per-socket writes with locks.
+- **Graceful protocol shutdown:** a Talk client exits only after receiving `Client exiting` from the server.
+
+## Automated Verification
+
+No servers need to be running before the test command. Tests allocate temporary ports and databases automatically.
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-테스트 범위는 다음과 같습니다.
+The integration suite verifies:
 
-- Hotel/Band API 조회, 예약, 취소
-- 잘못된 토큰과 예약 한도
-- 두 사용자의 동시 슬롯 충돌
-- Wedding Planner의 최적 공통 슬롯 예약
-- Talk 사용자 등록, 전체/개인 메시지, 사용자 목록, 종료
-- 미등록 사용자 및 잘못된 명령 처리
+- Hotel and Band availability, reservation, release, and isolation
+- Invalid authentication and per-user reservation limits
+- Conflict behavior when two users request the same slot
+- Automatic reservation of the earliest matching Hotel/Band slot
+- Talk registration, broadcast, direct messaging, user listing, and shutdown
+- Invalid commands and registration enforcement
 
-## 문제 해결
-
-### `Address already in use` 또는 포트 사용 오류
-
-기존 서버를 `Ctrl+C`로 종료하거나 다른 포트를 지정하십시오. Talk 클라이언트에는 서버와 같은 포트를 전달해야 합니다.
+Static checks used during development:
 
 ```powershell
-python .\Talk\myserver.py 127.0.0.1 9000
-python .\Talk\myclient.py 127.0.0.1 9000
+python -m pip install -r requirements-dev.txt
+ruff check Hotel Talk tests
+ruff format --check Hotel Talk tests
 ```
 
-### Hotel 클라이언트가 연결되지 않음
+`ruff` is a development tool and is not required to run either application. GitHub Actions repeats the static checks and integration suite on Windows and Ubuntu with Python 3.10 and 3.12 for every push and pull request.
 
-`local_api.py`가 먼저 실행 중인지 확인하고 `Hotel/api.ini`의 포트가 서버 출력과 같은지 확인하십시오.
+## Trade-offs and Future Work
 
-### 예약 데이터를 완전히 지우고 싶음
+- Demo authentication proves protocol behavior but is not suitable for an internet-facing deployment.
+- SQLite is appropriate for this local recovery; a multi-node deployment would require a shared database or consensus-aware storage design.
+- The cross-service booking flow uses compensation and therefore cannot guarantee strict atomicity if the rollback request also fails.
+- Chat history exists only in memory. Durable history would require a database and a delivery/acknowledgement model.
+- TLS, rate limiting, structured logging, and observability should be added before public deployment.
 
-실행 중인 API를 종료하고 `--reset-data` 옵션을 사용하십시오. 이 작업은 현재 설정된 SQLite 예약 데이터베이스를 새로 만듭니다.
+## Troubleshooting
 
-## 데이터와 보안
+### Address already in use
 
-- 생성되는 SQLite 데이터와 Python 캐시는 `.gitignore`로 제외됩니다.
-- 기본 토큰은 로컬 데모 전용이며 인증 보안을 제공하지 않습니다.
-- 공개 네트워크에 배포하려면 HTTPS, 안전한 토큰 저장, 요청 제한, 로그 정제가 추가로 필요합니다.
-- 사라진 학교 서버의 과거 예약 이력은 포함하지 않으며 새 로컬 데이터로 시작합니다.
+Stop the previous server with `Ctrl+C`, or provide another port to both the server and client.
+
+### Wedding Planner cannot connect
+
+Start `Hotel/local_api.py` first and confirm that the port printed by the server matches both URLs in `Hotel/api.ini`.
+
+### Resetting reservations
+
+Stop the API and start it with `--reset-data`. This recreates the configured SQLite reservation database.
+
+## Attribution
+
+The initial application requirements and protocols originated in University of Manchester distributed-computing coursework. The self-contained TCP runtime, local reservation API, SQLite persistence, resilience improvements, integration tests, and documentation in this repository are part of the subsequent recovery and refactoring work.
