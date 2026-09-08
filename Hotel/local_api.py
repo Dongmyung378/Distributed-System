@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local, persistent replacement for the retired course reservation APIs."""
+"""Local, persistent API for hotel and band reservations."""
 
 from __future__ import annotations
 
