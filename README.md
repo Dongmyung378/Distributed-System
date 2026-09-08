@@ -1,6 +1,6 @@
 # Resilient Distributed Systems Lab
 
-[한국어 문서](README.ko.md)
+[English](README.md) | [한국어](README.ko.md)
 
 Two networked applications restored and modernized after their original course APIs and runtime library became unavailable. The repository demonstrates concurrent TCP messaging, an HTTP reservation service, persistent state, conflict handling, and compensating transactions using Python.
 
