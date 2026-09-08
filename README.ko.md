@@ -1,6 +1,6 @@
 # 복원형 분산 시스템 실습
 
-[English README](README.md)
+[English](README.md) | [한국어](README.ko.md)
 
 기존 수업용 API와 런타임 라이브러리가 사라진 뒤에도 독립적으로 실행할 수 있도록 복구하고 현대화한 두 개의 네트워크 애플리케이션입니다. Python으로 동시 TCP 메시징, HTTP 예약 서비스, 영속 상태, 충돌 처리, 보상 트랜잭션을 구현합니다.
 
