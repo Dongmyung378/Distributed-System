@@ -1,14 +1,8 @@
-# Resilient Distributed Systems Lab
+# Distributed Chat and Reservation Systems
 
 [English](README.md) | [한국어](README.ko.md)
 
-Two networked applications restored and modernized after their original course APIs and runtime library became unavailable. The repository demonstrates concurrent TCP messaging, an HTTP reservation service, persistent state, conflict handling, and compensating transactions using Python.
-
-## Why This Project Exists
-
-These applications began as University of Manchester distributed-computing coursework. The original chat runtime was no longer bundled with the submission, and the remote hotel and band services stopped responding. The recovery work replaced those dependencies with self-contained implementations while preserving the original user-facing protocols.
-
-This is not presented as untouched coursework. It is a recovery and refactoring project focused on making legacy distributed-system exercises reproducible, testable, and safe to run locally.
+A Python project composed of a concurrent TCP chat server and a transactional hotel-and-band reservation system. It demonstrates network protocols, persistent state, conflict handling, compensating transactions, and cross-platform integration testing.
 
 ## Project Highlights
 
@@ -19,7 +13,7 @@ This is not presented as untouched coursework. It is a recovery and refactoring 
 | HTTP services | Local Hotel and Band API compatible with the original client contract |
 | Persistence | SQLite reservation store with automatic schema and slot initialization |
 | Conflict control | Database transaction and unique constraint prevent double booking |
-| Failure recovery | Hotel reservations are compensated when the matching Band reservation fails |
+| Cross-service consistency | Hotel reservations are compensated when the matching Band reservation fails |
 | Resilience | Request timeouts, bounded retries, status-specific exceptions, and live state reads |
 | Verification | Automated integration tests exercise both systems over real TCP and HTTP sockets |
 
@@ -274,7 +268,7 @@ ruff format --check Hotel Talk tests
 ## Trade-offs and Future Work
 
 - Demo authentication proves protocol behavior but is not suitable for an internet-facing deployment.
-- SQLite is appropriate for this local recovery; a multi-node deployment would require a shared database or consensus-aware storage design.
+- SQLite is appropriate for local execution; a multi-node deployment would require a shared database or consensus-aware storage design.
 - The cross-service booking flow uses compensation and therefore cannot guarantee strict atomicity if the rollback request also fails.
 - Chat history exists only in memory. Durable history would require a database and a delivery/acknowledgement model.
 - TLS, rate limiting, structured logging, and observability should be added before public deployment.
@@ -292,7 +286,3 @@ Start `Hotel/local_api.py` first and confirm that the port printed by the server
 ### Resetting reservations
 
 Stop the API and start it with `--reset-data`. This recreates the configured SQLite reservation database.
-
-## Attribution
-
-The initial application requirements and protocols originated in University of Manchester distributed-computing coursework. The self-contained TCP runtime, local reservation API, SQLite persistence, resilience improvements, integration tests, and documentation in this repository are part of the subsequent recovery and refactoring work.
