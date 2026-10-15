@@ -4,7 +4,7 @@
 
 Two Python applications explore different network failures: **Talk** provides concurrent TCP messaging, while **Hotel Wedding Planner** coordinates hotel and band reservations through HTTP and SQLite. They share a repository, not an application session or data store.
 
-Original development: **October to December 2024**. Reliability improvements and reproducibility work: **October 2026**, recorded separately from the original development period. The initial source remains in Git history, including commit `1504ab3`.
+Original development: **September to December 2024**. Reliability improvements and reproducibility work: **October 2026**, recorded separately from the original development period. The initial source remains in Git history, including commit `1504ab3`.
 
 ## Results and evidence
 

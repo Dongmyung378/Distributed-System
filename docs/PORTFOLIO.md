@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-**Original development:** October to December 2024. **Reliability maintenance:** October 2026.
+**Original development:** September to December 2024. **Reliability maintenance:** October 2026.
 
 This project implements two networked applications in Python. Talk handles concurrent users over a newline-delimited TCP protocol. Hotel Wedding Planner uses an HTTP client, a local Hotel/Band API, and SQLite to find and reserve a matching pair of slots. The October 2026 work preserves those functions while adding bounded resource handling and recoverable failure paths.
 

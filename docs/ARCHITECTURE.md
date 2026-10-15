@@ -4,7 +4,7 @@
 
 ## Scope and compatibility
 
-The repository contains two independent applications: a newline-delimited TCP chat and an HTTP hotel/band booking planner. The October to December 2024 development period remains unchanged. October 2026 maintenance strengthens failure handling without replacing the initial commands, reservation URLs, response bodies, manual actions, or automatic earliest-slot matching.
+The repository contains two independent applications: a newline-delimited TCP chat and an HTTP hotel/band booking planner. The September to December 2024 development period remains unchanged. October 2026 maintenance strengthens failure handling without replacing the initial commands, reservation URLs, response bodies, manual actions, or automatic earliest-slot matching.
 
 ## Talk: bounded threaded messaging
 
