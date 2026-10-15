@@ -2,287 +2,152 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-A Python project composed of a concurrent TCP chat server and a transactional hotel-and-band reservation system. It demonstrates network protocols, persistent state, conflict handling, compensating transactions, and cross-platform integration testing.
+Two Python applications explore different network failures: **Talk** provides concurrent TCP messaging, while **Hotel Wedding Planner** coordinates hotel and band reservations through HTTP and SQLite. They share a repository, not an application session or data store.
 
-## Project Highlights
+Original development: **October to December 2024**. Reliability improvements and reproducibility work: **October 2026**, recorded separately from the original development period. The initial source remains in Git history, including commit `1504ab3`.
 
-| Area | Implementation |
-|---|---|
-| Concurrent messaging | Thread-per-connection TCP server with synchronized shared state |
-| Text protocol | Registration, broadcast, direct messaging, user discovery, and graceful disconnect |
-| HTTP services | Local Hotel and Band API compatible with the original client contract |
-| Persistence | SQLite reservation store with automatic schema and slot initialization |
-| Conflict control | Database transaction and unique constraint prevent double booking |
-| Cross-service consistency | Hotel reservations are compensated when the matching Band reservation fails |
-| Resilience | Request timeouts, bounded retries, status-specific exceptions, and live state reads |
-| Verification | Automated integration tests exercise both systems over real TCP and HTTP sockets |
+## Results and evidence
 
-## Architecture
+**85 tests passed in each of four environments**, covering real TCP/HTTP, concurrent reservations, lost responses, guarded compensation, process termination and restart. All 340 executions passed with no failures, errors or skips; the initial five tests remain.
 
-### Talk
+With one stalled connection and three healthy receivers, each version completed three identical trials: **3 of 900 planned delivery observations initially, versus 900 of 900 after strengthening in every trial**. The initial writer attempted only 48 of 300 broadcasts and submitted 47, so incomplete observations are not a message-loss rate. Under 60 healthy connections the median trial-level p95 rose from **1.6338ms to 3.2020ms**. Resource measurements include the server and client harness together.
 
-```mermaid
-flowchart LR
-    A[Chat Client: Alice] -->|newline-delimited TCP| S[Threaded Chat Server]
-    B[Chat Client: Bob] -->|newline-delimited TCP| S
-    C[Additional Clients] -->|newline-delimited TCP| S
-    S --> L[Lock-protected connection and username registry]
-    S -->|broadcast or direct message| A
-    S -->|broadcast or direct message| B
-    S -->|broadcast or direct message| C
-```
+Completed environments: **Windows Python 3.10.22 / 3.12.7 and WSL Ubuntu Python 3.10.22 / 3.12.3**, with separate virtual environments installed from the dependency lock. Linux used a separate source copy; normalized source hashes match across all four runs. WSL shares the same physical host. These are completed local runs, not a claim of GitHub Actions success.
 
-Every connection is handled by an independent server thread. A re-entrant lock protects registration and connection state, while each client handler serializes writes to its socket.
+The measurements use local loopback connections and controlled faults. They do not estimate internet latency or production capacity. See [verification summary](docs/reports/verification-summary.json), [initial benchmark](docs/reports/initial-benchmark.json), [final benchmark](docs/reports/final-benchmark.json), and [comparison](docs/reports/comparison.json). CI configuration and completed local validation are separate evidence; no successful GitHub Actions run is implied.
 
-### Hotel Wedding Planner
+![Recorded chat measurements](docs/figures/performance.svg)
 
-```mermaid
-flowchart LR
-    CLI[Wedding Planner CLI] -->|ReservationApi + Bearer token| H[Hotel HTTP endpoints]
-    CLI -->|ReservationApi + Bearer token| B[Band HTTP endpoints]
-    H --> API[Local threaded reservation server]
-    B --> API
-    API -->|transactional reads and writes| DB[(SQLite)]
-    CLI -. rollback hotel reservation .-> H
-```
+![Two independent application flows](docs/figures/architecture.svg)
 
-Hotel and Band are separate resources exposed by one local HTTP process. SQLite provides persistent state and serializes competing writes. The CLI coordinates the two independent resources with a compensating action rather than pretending they share one atomic transaction.
+## What was strengthened
 
-## Repository Layout
+| Area | Initial behavior retained | Reliability improvement |
+| --- | --- | --- |
+| Talk | Registration, broadcast, direct messages, user listing, quit, newline protocol, one receiving thread per connection | Bounded input, bounded connections, registration deadline, bounded outgoing queues, slow-peer isolation, orderly shutdown |
+| Hotel API | Original reservation URLs, response bodies, demo identities, two-reservation limit | Atomic mutation receipts, replay-safe request keys, receipt lookup, current reservation generation, guarded cancellation |
+| Planner CLI | Manual reserve/cancel, availability views, earliest matching slot, explicit cleanup menu | Durable intent journal in the CLI, process exclusion, uncertain-outcome recovery, current-pair checks, compensation limited to this workflow's reservations |
 
-```text
-Distributed-System/
-├── Hotel/
-│   ├── api.ini             # Local API, tokens, retries, and database settings
-│   ├── booking.py          # Interactive Wedding Planner
-│   ├── exceptions.py       # Status-specific client exceptions
-│   ├── local_api.py        # Threaded Hotel/Band HTTP service
-│   └── reservationapi.py   # Retrying HTTP client
-├── Talk/
-│   ├── commands.json       # Chat protocol examples
-│   ├── myclient.py         # Interactive TCP chat client
-│   └── myserver.py         # Concurrent TCP chat server
-├── tests/
-│   ├── test_hotel.py       # HTTP and planner integration tests
-│   └── test_talk.py        # TCP protocol integration tests
-├── .github/workflows/ci.yml # Cross-platform continuous integration
-├── requirements-dev.txt
-├── requirements.txt
-└── README.ko.md
-```
+## Install
 
-## Requirements
+Python **3.10 or newer** is required. Talk uses the standard library. Hotel additionally uses Requests. Docker and external Hotel/Band services are not required.
 
-- Python 3.10 or newer
-- Local TCP port `8090` for Talk
-- Local HTTP port `8081` for Hotel
-
-## Installation
-
-Clone the repository, create a virtual environment, and install the single runtime dependency.
-
-### Windows PowerShell
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 ```
 
-If PowerShell prevents environment activation, call its interpreter directly:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### macOS/Linux
+macOS or Linux:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements-lock.txt
 ```
 
-## Running Talk
+The lock file records five exact runtime package versions. `requirements.txt` remains available for installations within the supported dependency ranges. Use `requirements-dev-lock.txt` for the tested development dependency snapshot, including Ruff. The commands below use `python`; activate the environment first or replace it with its interpreter path.
 
-Start the server in the first terminal:
+## Run Talk
 
-```powershell
-python .\Talk\myserver.py
+Start the server in one terminal and clients in two other terminals:
+
+```bash
+python Talk/myserver.py
+python Talk/myclient.py
+python Talk/myclient.py
 ```
 
-Start a client in a second terminal:
+The default address is `127.0.0.1:8090`. Register different names, then use:
 
-```powershell
-python .\Talk\myclient.py
+| Input | Behavior |
+| --- | --- |
+| `send_all Hello everyone` | Broadcast to every registered user, including the sender |
+| `send_to Bob Hello Bob` | Send to the connected user named Bob |
+| `user_list` | List registered users |
+| `quit` | Request `Client exiting`, then disconnect |
+
+A raw client registers with `register <name>`. Frames are UTF-8 text terminated by a newline. Valid initial commands and responses are preserved. New limits reject oversized or invalid input rather than silently accepting unbounded data.
+
+| Server setting | Default |
+| --- | ---: |
+| Maximum admitted connections | 128 |
+| Maximum input frame, excluding newline | 8,192 bytes |
+| Maximum name | 64 UTF-8 bytes |
+| Registration deadline from connection | 30 seconds |
+| Outgoing queue per connection | 128 frames |
+| Send deadline per outgoing frame | 2 seconds |
+
+The receiving thread model remains. Each connection also has a sending thread so a stalled reader does not hold up other recipients. Queue overflow or a send deadline closes that peer. `messages_enqueued` and `messages_sent` are diagnostic counters, not acknowledgements of a recipient reading a message. Talk does not persist message history or promise acknowledged or durable delivery.
+
+For custom settings:
+
+```bash
+python Talk/myserver.py 127.0.0.1 9000 --max-clients 64 --registration-timeout 30 --outbound-queue-size 64 --send-timeout 2
+python Talk/myclient.py 127.0.0.1 9000
 ```
 
-Open another terminal and run the same client command to test multi-user behavior. The default endpoint is `127.0.0.1:8090`. A custom address can be passed to both programs:
+The programmatic factory remains `create_server(host, port, **options)`. `server.diagnostics()` returns counts without chat contents.
 
-```powershell
-python .\Talk\myserver.py 0.0.0.0 9000
-python .\Talk\myclient.py 127.0.0.1 9000
-```
-
-Opening the server on `0.0.0.0` permits LAN connections when the operating-system firewall also allows the selected port.
-
-### Talk Protocol
-
-After entering a unique screen name, use these commands:
-
-| Command | Purpose | Example |
-|---|---|---|
-| `send_all <message>` | Send to every registered user | `send_all Hello everyone` |
-| `send_to <user> <message>` | Send to one user | `send_to Bob Hello Bob` |
-| `user_list` | List registered users | `user_list` |
-| `quit` | Disconnect after server confirmation | `quit` |
-
-Screen names cannot contain whitespace and cannot be registered by two connected clients at the same time.
-
-## Running Hotel
-
-Hotel uses two processes: the local reservation API and the Wedding Planner client.
-
-### 1. Start the Reservation API
+## Run Hotel Wedding Planner
 
 In the first terminal:
 
-```powershell
-python .\Hotel\local_api.py
+```bash
+python Hotel/local_api.py
 ```
 
-The default setup creates:
+In the second:
 
-- API server at `http://127.0.0.1:8081`
-- Hotel slots `1` through `100`
-- Band slots `1` through `100`
-- Persistent database at `Hotel/data/reservations.db`
-
-Reservations survive server restarts. To reset the local data safely while the server is stopped:
-
-```powershell
-python .\Hotel\local_api.py --reset-data
+```bash
+python Hotel/booking.py
 ```
 
-The host, port, database path, and initial slot count can be overridden:
+The API defaults to `127.0.0.1:8081`, slots 1 through 100 per service, and `Hotel/data/reservations.db`. Menu 6 reserves the earliest matching hotel and band slot. Menus 3 and 4 preserve manual reservation and cancellation. **Menu 7 deliberately removes unnecessary reservations only when selected**; automatic matching does not perform that cleanup implicitly.
 
-```powershell
-python .\Hotel\local_api.py --port 9001 --database .\Hotel\data\demo.db --slots 250
+`Hotel/api.ini` contains local demo identities. Environment variables `HOTEL_API_KEY` and `BAND_API_KEY` override the client identities. These fixtures are not internet-facing authentication.
+
+The interactive CLI uses `Hotel/data/booking-journal.db`. Set `BOOKING_JOURNAL_PATH` to choose another journal. Relative journal paths resolve under `Hotel`. Restart with the same API database, journal, endpoints, and identities to recover unfinished automatic attempts. A journal process lock prevents two planners from using the same journal simultaneously. An unresolved attempt is retained and blocks a new automatic attempt for that account scope until it can be resolved.
+
+A direct `reserve_best_match(clients)` call uses an **in-memory journal** that ends with the call. Library callers requiring restart recovery must pass an explicit file-backed `RecoveryJournal(path)` and later call `recover_pending` with that same journal. Manual menu operations are not the same recoverable two-service workflow.
+
+## HTTP compatibility and recovery contract
+
+Every request requires the relevant demo bearer identity. Existing endpoints remain:
+
+| Method | Path, where `service` is `hotel` or `band` | Purpose |
+| --- | --- | --- |
+| GET | `/{service}/api/reservation/available` | Available slots |
+| GET | `/{service}/api/reservation` | Current identity's held slots |
+| POST | `/{service}/api/reservation/{id}` | Reserve a slot |
+| DELETE | `/{service}/api/reservation/{id}` | Release a held slot |
+| GET | `/{service}/api/operation/{operation_id}` | Look up an identity-scoped mutation receipt and its current reservation generation |
+
+The Python client supplies one `Idempotency-Key` per logical mutation and reuses it for retries. The server commits the reservation change and its receipt in one SQLite transaction. Replaying the same request returns its recorded outcome. Reusing the key for a different method, slot, or expected generation returns a conflict.
+
+Recovery compensation supplies `Expected-Reservation-Operation-Id` when cancelling a reservation. If a slot has been cancelled and rebooked, this guard prevents deleting the replacement. A successful historical receipt does not prove that its reservation still exists; the planner separately checks both current generations before reporting a recovered pair as matched.
+
+Receipts are retained without automatic expiration. The design uses compensating requests and independent service reads; it is not a distributed atomic transaction. A failure can remain unresolved, and another actor can change a reservation after verification.
+
+## Reproduce verification and measurements
+
+```bash
+python -m pip install -r requirements-dev-lock.txt
+python -B scripts/verify.py --output target/verification.json
+python -m ruff check Hotel Talk tests scripts
+python -m ruff format --check Hotel Talk tests scripts
+python -B scripts/benchmark.py --project . --scenario all --trials 3 --label current-source --output target/benchmark.json
 ```
 
-When changing the port, update both service URLs in `Hotel/api.ini` as well.
+Tests create temporary ports and databases. No prestarted server, credentials, GPU, or cloud account is needed. The benchmark uses the same harness against either source checkout. To compare the initial version, export commit `1504ab3` into a separate directory and pass that directory with `--project`; use the current harness for both versions.
 
-### 2. Start the Wedding Planner
+Healthy measurements use 2, 10, 30, and 60 receiving clients, five warmups, and 20 measured broadcasts per trial. The slow-peer fixture adds a stalled connection with constrained socket buffers. Read missing and duplicate delivery counts alongside percentiles; a low latency among a small delivered subset is not a successful run.
 
-In the second terminal:
+`max_elapsed` in `ReservationApi` limits retry scheduling and the remaining timeout supplied to Requests. It is **not a strict absolute wall-clock deadline** for a whole operation, nor for the complete two-service workflow.
 
-```powershell
-python .\Hotel\booking.py
-```
+## Documentation and limits
 
-The menu supports:
+- [Architecture and failure handling](docs/ARCHITECTURE.md) / [한국어](docs/ARCHITECTURE.ko.md)
+- [Portfolio scope and evidence](docs/PORTFOLIO.md) / [한국어](docs/PORTFOLIO.ko.md)
 
-1. Viewing current Hotel and Band reservations
-2. Viewing available slots
-3. Reserving either service manually
-4. Cancelling a reservation
-5. Finding slots available from both services
-6. Reserving the earliest matching Hotel and Band slot
-7. Removing duplicate or unnecessary reservations
-
-For a quick demonstration, select option `6`, then option `1`. A fresh database should show slot `1` held for both Hotel and Band.
-
-### Local Tokens
-
-`Hotel/api.ini` contains two demo identities per service. These values are local fixtures, not production secrets. The active client identity can be overridden with environment variables:
-
-```powershell
-$env:HOTEL_API_KEY = "hotel-demo-user-2"
-$env:BAND_API_KEY = "band-demo-user-2"
-python .\Hotel\booking.py
-```
-
-Use environment variables or a secret manager for real credentials. Never commit production tokens.
-
-## Hotel HTTP Contract
-
-Every request requires `Authorization: Bearer <token>`.
-
-| Method | Endpoint | Behavior |
-|---|---|---|
-| `GET` | `/{service}/api/reservation/available` | List unreserved slots |
-| `GET` | `/{service}/api/reservation` | List slots held by the current token |
-| `POST` | `/{service}/api/reservation/{id}` | Reserve a slot |
-| `DELETE` | `/{service}/api/reservation/{id}` | Release a slot |
-
-`service` is either `hotel` or `band`.
-
-| Status | Meaning |
-|---|---|
-| `400` | Malformed request or slot ID |
-| `401` | Missing or invalid token |
-| `403` | Slot does not exist |
-| `404` | Reservation is not held by this token |
-| `409` | Slot is already held by another token |
-| `451` | Two-reservation limit exceeded |
-
-## Reliability and Consistency Decisions
-
-- **Bounded failure:** HTTP calls use explicit timeouts and finite retries with incremental delay.
-- **No stale client cache:** reservation views are fetched from the service for every operation.
-- **Write serialization:** `BEGIN IMMEDIATE` serializes competing SQLite reservations.
-- **Database invariant:** `(service, slot_id)` is the reservation primary key, so a slot cannot be double-booked.
-- **Compensation:** if Hotel succeeds and Band fails, the new Hotel reservation is released.
-- **Thread safety:** Talk protects its shared client registry and per-socket writes with locks.
-- **Graceful protocol shutdown:** a Talk client exits only after receiving `Client exiting` from the server.
-
-## Automated Verification
-
-No servers need to be running before the test command. Tests allocate temporary ports and databases automatically.
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-The integration suite verifies:
-
-- Hotel and Band availability, reservation, release, and isolation
-- Invalid authentication and per-user reservation limits
-- Conflict behavior when two users request the same slot
-- Automatic reservation of the earliest matching Hotel/Band slot
-- Talk registration, broadcast, direct messaging, user listing, and shutdown
-- Invalid commands and registration enforcement
-
-Static checks used during development:
-
-```powershell
-python -m pip install -r requirements-dev.txt
-ruff check Hotel Talk tests
-ruff format --check Hotel Talk tests
-```
-
-`ruff` is a development tool and is not required to run either application. GitHub Actions repeats the static checks and integration suite on Windows and Ubuntu with Python 3.10 and 3.12 for every push and pull request.
-
-## Trade-offs and Future Work
-
-- Demo authentication proves protocol behavior but is not suitable for an internet-facing deployment.
-- SQLite is appropriate for local execution; a multi-node deployment would require a shared database or consensus-aware storage design.
-- The cross-service booking flow uses compensation and therefore cannot guarantee strict atomicity if the rollback request also fails.
-- Chat history exists only in memory. Durable history would require a database and a delivery/acknowledgement model.
-- TLS, rate limiting, structured logging, and observability should be added before public deployment.
-
-## Troubleshooting
-
-### Address already in use
-
-Stop the previous server with `Ctrl+C`, or provide another port to both the server and client.
-
-### Wedding Planner cannot connect
-
-Start `Hotel/local_api.py` first and confirm that the port printed by the server matches both URLs in `Hotel/api.ini`.
-
-### Resetting reservations
-
-Stop the API and start it with `--reset-data`. This recreates the configured SQLite reservation database.
+The runtime databases contain reservation ownership and operation records. Keep runtime databases, local journals, process locks, chat logs, credentials, caches, and private maintenance notes outside public archives. The journal stores workflow state and a hashed account scope rather than plaintext bearer credentials or full exception messages. This is a local systems project with bounded failure handling, not a hardened public messaging or booking service.

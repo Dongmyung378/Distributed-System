@@ -9,6 +9,9 @@ venv/
 .ruff_cache/
 .coverage
 htmlcov/
+target/
 Hotel/data/
+*.db
+*.db-journal
 *.db-shm
 *.db-wal

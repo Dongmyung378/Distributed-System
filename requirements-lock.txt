@@ -1,0 +1,6 @@
+# Verified runtime dependency snapshot; optional alternative to requirements.txt.
+requests==2.34.2
+urllib3==2.8.0
+charset-normalizer==3.5.2
+idna==3.20
+certifi==2026.7.22

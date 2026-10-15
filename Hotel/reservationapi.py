@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import math
+import re
 import time
+import uuid
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 from exceptions import (
     BadRequestError,
     BadSlotError,
+    IdempotencyConflictError,
     InvalidTokenError,
     NotProcessedError,
+    OperationUncertainError,
     ReservationLimitError,
     SlotUnavailableError,
+    StaleReservationError,
 )
+
+OPERATION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 CLIENT_ERRORS = {
     400: BadRequestError,
@@ -36,15 +44,51 @@ class ReservationApi:
         retries: int = 3,
         delay: float = 0.5,
         timeout: float = 10.0,
+        *,
+        max_elapsed: float = 60.0,
     ) -> None:
-        if retries < 1:
-            raise ValueError("retries must be at least 1")
+        if (
+            isinstance(retries, bool)
+            or not isinstance(retries, int)
+            or not 1 <= retries <= 10
+        ):
+            raise ValueError("retries must be an integer between 1 and 10")
+        for name, value in (
+            ("delay", delay),
+            ("timeout", timeout),
+            ("max_elapsed", max_elapsed),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise ValueError(f"{name} must be finite")
+        if not 0 <= delay <= 60 or not 0 < timeout <= 60 or not 0 < max_elapsed <= 300:
+            raise ValueError(
+                "delay must be 0..60s, timeout 0..60s, and max_elapsed 0..300s"
+            )
+        parsed_url = urlsplit(base_url)
+        if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+            raise ValueError("base_url must be an HTTP or HTTPS URL")
+        if not isinstance(token, str) or not token.strip():
+            raise ValueError("token must not be empty")
         self.base_url = base_url.rstrip("/") + "/"
         self.token = token
         self.retries = retries
-        self.delay = max(0.0, delay)
+        self.delay = delay
         self.timeout = timeout
+        self.max_elapsed = max_elapsed
         self.session = requests.Session()
+
+    def close(self) -> None:
+        self.session.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
 
     @property
     def service_name(self) -> str:
@@ -66,26 +110,72 @@ class ReservationApi:
             return str(body["message"])
         return response.reason or f"HTTP {response.status_code}"
 
-    def _send_request(self, method: str, endpoint: str) -> Any:
+    @staticmethod
+    def _validate_operation_id(operation_id: str) -> str:
+        if not isinstance(operation_id, str) or not OPERATION_ID.fullmatch(
+            operation_id
+        ):
+            raise ValueError(
+                "operation_id must contain 1..128 ASCII identifier characters"
+            )
+        return operation_id
+
+    def _send_request(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        operation_id: str | None = None,
+        expected_operation_id: str | None = None,
+        allow_missing: bool = False,
+    ) -> Any:
         url = urljoin(self.base_url, endpoint.lstrip("/"))
         last_error: Exception | None = None
+        headers = self._headers()
+        if method in ("POST", "DELETE"):
+            operation_id = self._validate_operation_id(
+                uuid.uuid4().hex if operation_id is None else operation_id
+            )
+            headers["Idempotency-Key"] = operation_id
+        if expected_operation_id is not None:
+            headers["Expected-Reservation-Operation-Id"] = self._validate_operation_id(
+                expected_operation_id
+            )
+        deadline = time.monotonic() + self.max_elapsed
+        attempts = 0
 
         for attempt in range(1, self.retries + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            attempts = attempt
+            response = None
             try:
                 response = self.session.request(
                     method,
                     url,
-                    headers=self._headers(),
-                    timeout=self.timeout,
+                    headers=headers,
+                    timeout=min(self.timeout, remaining),
                 )
 
                 if 200 <= response.status_code < 300:
                     return response.json() if response.content else {}
+                if allow_missing and response.status_code == 404:
+                    return None
 
                 reason = self._reason(response)
                 error_type = CLIENT_ERRORS.get(response.status_code)
+                if response.status_code == 409:
+                    try:
+                        code = response.json().get("error")
+                    except (ValueError, AttributeError):
+                        code = None
+                    error_type = {
+                        "idempotency_key_conflict": IdempotencyConflictError,
+                        "stale_reservation": StaleReservationError,
+                    }.get(code, SlotUnavailableError)
                 if error_type:
-                    raise error_type(reason)
+                    raise error_type(reason, response=response)
 
                 if response.status_code < 500:
                     response.raise_for_status()
@@ -98,19 +188,26 @@ class ReservationApi:
                 raise
             except requests.RequestException as error:
                 last_error = error
+            finally:
+                if response is not None:
+                    response.close()
 
             if attempt < self.retries:
                 wait = self.delay * attempt
+                if time.monotonic() + wait >= deadline:
+                    break
                 print(
                     f"[{self.service_name}] request failed "
                     f"({attempt}/{self.retries}); retrying in {wait:.1f}s"
                 )
                 time.sleep(wait)
 
-        raise requests.HTTPError(
-            f"[{self.service_name}] request failed after {self.retries} attempts: "
-            f"{last_error}"
-        ) from last_error
+        message = f"[{self.service_name}] request failed after {attempts} attempts: {last_error}"
+        if operation_id is not None:
+            raise OperationUncertainError(
+                message, operation_id=operation_id, method=method, last_error=last_error
+            ) from last_error
+        raise requests.HTTPError(message) from last_error
 
     def get_slots_available(self) -> list[dict[str, str]]:
         return self._send_request("GET", "reservation/available")
@@ -118,8 +215,32 @@ class ReservationApi:
     def get_slots_held(self) -> list[dict[str, str]]:
         return self._send_request("GET", "reservation")
 
-    def release_slot(self, slot_id: str | int) -> dict[str, str]:
-        return self._send_request("DELETE", f"reservation/{slot_id}")
+    def get_operation(self, operation_id: str) -> dict | None:
+        operation_id = self._validate_operation_id(operation_id)
+        return self._send_request(
+            "GET", f"operation/{quote(operation_id, safe='')}", allow_missing=True
+        )
 
-    def reserve_slot(self, slot_id: str | int) -> dict[str, str]:
-        return self._send_request("POST", f"reservation/{slot_id}")
+    def release_slot(
+        self,
+        slot_id: str | int,
+        *,
+        operation_id: str | None = None,
+        expected_operation_id: str | None = None,
+    ) -> dict[str, str]:
+        return self._send_request(
+            "DELETE",
+            f"reservation/{slot_id}",
+            operation_id=operation_id,
+            expected_operation_id=expected_operation_id,
+        )
+
+    def reserve_slot(
+        self,
+        slot_id: str | int,
+        *,
+        operation_id: str | None = None,
+    ) -> dict[str, str]:
+        return self._send_request(
+            "POST", f"reservation/{slot_id}", operation_id=operation_id
+        )

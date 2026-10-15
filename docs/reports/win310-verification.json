@@ -1,0 +1,475 @@
+{
+  "schema": "network-systems-verification/v1",
+  "environment": {
+    "python": "3.10.22",
+    "os": "Windows",
+    "machine": "AMD64",
+    "packages": {
+      "requests": "2.34.2",
+      "urllib3": "2.8.0",
+      "charset-normalizer": "3.5.2",
+      "idna": "3.20",
+      "certifi": "2026.7.22",
+      "ruff": "0.17.0"
+    }
+  },
+  "tests": 85,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "seconds": 28.997965,
+  "successful": true,
+  "source_changed_during_tests": false,
+  "source_hash_policy": "SHA-256 of UTF-8 source with CRLF normalized to LF, ignoring checkout line endings.",
+  "source_sha256": {
+    "Hotel/api.ini": "8f5b121f046cd8f1cb112abb394385012951ca803df90232b4eaad88d7d23971",
+    "Hotel/booking.py": "2041fc99abc0d7913b0ac2dcaefd2919ebf2888305253f145722fcfa86ed3e4f",
+    "Hotel/exceptions.py": "04c01b5724fcb2d02a9b0b9930d31c2244556c0b5f0b732c55ebd0fbbb0c19c5",
+    "Hotel/local_api.py": "1bdd61f39775c1e25926a9478b4a87c99a0ccca4fc2387487134536683b870e2",
+    "Hotel/recovery.py": "7cc898bac3be19f7cb31315daafa4566fcfff2dedaf64b2f151dcb31f9f7bf0a",
+    "Hotel/reservationapi.py": "b2d06eb4f023bb6b5eaed5c5e035f0a7ae1d68a60e2c07b6f70b9e6bd1337650",
+    "requirements-dev-lock.txt": "5311bdb87cb270bd1b3dcaa66555b2c9d6c0f2be9349b0b93de65dc142d0e0ac",
+    "requirements-dev.txt": "3358b4b2bd28e3427603314faae56739ea8d5608e32eeaffe6a72b1606728bab",
+    "requirements-lock.txt": "3982658d9a414745fb3b1109a6c9c9da2f66dde306d0a39853ea4ce27180f244",
+    "requirements.txt": "dfb599a9b86d5de859901751a5562b7103217f4de74f4313c95998ea422c345a",
+    "scripts/benchmark.py": "b4580febe2cd95000b5ee539243eb5a04240a1c9344507853f31672dc1ceaef2",
+    "scripts/verify.py": "c56d5be6761097173581f2625d331f9e7a96ff37daf50916177fc6efde16dbaa",
+    "Talk/myclient.py": "a3c3d9c811c5f74d8b4f15276e6f5e68e8f8f39db172d51299bedba91ac7a02b",
+    "Talk/myserver.py": "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb",
+    "tests/test_booking_recovery.py": "f499c927977ccdecac7eaa1e3284c61bcdf7d0d95e3992ce12834a6559b33f5e",
+    "tests/test_hotel.py": "36a72a4cb7ad5ef7431dd5f9424bba50c5c77f5473027a9e8f0e38342fc4be54",
+    "tests/test_hotel_cli.py": "57174d68b94c7b62b69c4955775bf19b389e716f2bb81ef687a22948281a7b4c",
+    "tests/test_reservation_reliability.py": "e63c3d87d652ea0186c61e3df3f95260e61265c21ea79195c438ff27b6074037",
+    "tests/test_talk.py": "9c24a74401b14f7e3c6f6a0e8ee27213975b90431fd72a94d54368e5bbe240a7",
+    "tests/test_talk_resilience.py": "5095a8dc4a44a055516217016dbaf7235c61ecf085f5fbf0fe7a64e52919ed52"
+  },
+  "checks": [
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_authentication_failure_does_not_erase_a_previously_uncertain_write",
+      "status": "passed",
+      "seconds": 0.633407
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_automatic_matching_preserves_unrelated_manual_reservations",
+      "status": "passed",
+      "seconds": 0.618823
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_cancelled_hotel_is_not_recreated_and_only_owned_band_is_compensated",
+      "status": "passed",
+      "seconds": 0.632572
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_candidate_race_rolls_back_only_its_own_hotel_then_tries_next",
+      "status": "passed",
+      "seconds": 0.645384
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_cli_startup_runs_recovery_before_the_menu",
+      "status": "passed",
+      "seconds": 0.569372
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_default_memory_journal_explicitly_explains_restart_recovery_limit",
+      "status": "passed",
+      "seconds": 0.539066
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_existing_match_does_not_clean_up_unrelated_reservations",
+      "status": "passed",
+      "seconds": 0.566966
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_failed_compensation_is_retained_and_retried_after_restart",
+      "status": "passed",
+      "seconds": 0.620841
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_final_pair_check_failure_is_durable_and_rechecked",
+      "status": "passed",
+      "seconds": 0.654487
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_intent_without_sent_request_is_closed_by_same_key_and_compensated",
+      "status": "passed",
+      "seconds": 0.648913
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_interrupt_after_band_commit_preserves_both_reservations",
+      "status": "passed",
+      "seconds": 0.653971
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_interrupt_after_hotel_commit_is_recovered_without_reserving_band",
+      "status": "passed",
+      "seconds": 0.660955
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_journal_contains_no_raw_tokens_or_transport_error_text",
+      "status": "passed",
+      "seconds": 0.530116
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_legacy_journal_gets_a_stable_band_compensation_key",
+      "status": "passed",
+      "seconds": 0.530027
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_lost_band_response_and_receipt_outage_survive_client_restart",
+      "status": "passed",
+      "seconds": 1.206173
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_lost_compensation_response_does_not_remove_a_later_manual_replacement",
+      "status": "passed",
+      "seconds": 0.706468
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_lost_hotel_response_is_confirmed_then_compensated_on_restart",
+      "status": "passed",
+      "seconds": 0.69346
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_malformed_receipt_cannot_authorize_destructive_recovery",
+      "status": "passed",
+      "seconds": 0.558786
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_missing_current_reservation_proof_keeps_pair_unresolved",
+      "status": "passed",
+      "seconds": 0.605127
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_orphaned_band_compensation_failure_survives_restart",
+      "status": "passed",
+      "seconds": 0.757039
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_other_account_cannot_recover_or_cancel_this_workflow",
+      "status": "passed",
+      "seconds": 0.544955
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_process_exit_automatically_releases_the_journal_lock",
+      "status": "passed",
+      "seconds": 0.523372
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_replaced_band_is_preserved_while_original_hotel_is_removed",
+      "status": "passed",
+      "seconds": 0.713722
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_replaced_hotel_is_preserved_while_orphaned_band_is_removed",
+      "status": "passed",
+      "seconds": 0.653985
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_same_owner_replacement_is_never_deleted_by_old_compensation",
+      "status": "passed",
+      "seconds": 0.630233
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_second_planner_cannot_compensate_an_active_planners_work",
+      "status": "passed",
+      "seconds": 1.253963
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_success_is_durable_and_repeated_recovery_is_a_noop",
+      "status": "passed",
+      "seconds": 0.686541
+    },
+    {
+      "id": "test_booking_recovery.BookingRecoveryTests.test_unreachable_service_retains_uncertain_state_and_blocks_new_attempts",
+      "status": "passed",
+      "seconds": 0.537641
+    },
+    {
+      "id": "test_hotel.HotelIntegrationTests.test_authentication_and_reservation_limit",
+      "status": "passed",
+      "seconds": 0.538922
+    },
+    {
+      "id": "test_hotel.HotelIntegrationTests.test_reserve_conflict_release_and_service_isolation",
+      "status": "passed",
+      "seconds": 0.557249
+    },
+    {
+      "id": "test_hotel.HotelIntegrationTests.test_wedding_planner_reserves_best_matching_slot",
+      "status": "passed",
+      "seconds": 0.612457
+    },
+    {
+      "id": "test_hotel_cli.HotelCliTests.test_real_cli_match_and_reservations_persist_across_api_restart",
+      "status": "passed",
+      "seconds": 1.478191
+    },
+    {
+      "id": "test_reservation_reliability.ReservationClientValidationTests.test_invalid_operation_id_never_reaches_network",
+      "status": "passed",
+      "seconds": 0.000826
+    },
+    {
+      "id": "test_reservation_reliability.ReservationClientValidationTests.test_invalid_retry_configuration_is_rejected",
+      "status": "passed",
+      "seconds": 0.00013
+    },
+    {
+      "id": "test_reservation_reliability.ReservationClientValidationTests.test_retry_budget_does_not_schedule_attempts_beyond_deadline",
+      "status": "passed",
+      "seconds": 0.00049
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_allowed_operation_id_punctuation_round_trips_through_url",
+      "status": "passed",
+      "seconds": 0.041142
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_changed_compensation_guard_conflicts_with_original_key",
+      "status": "passed",
+      "seconds": 0.041781
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_confirmed_failure_receipt_is_not_reexecuted_after_state_change",
+      "status": "passed",
+      "seconds": 0.078846
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_database_lock_returns_explicit_503_without_partial_operation",
+      "status": "passed",
+      "seconds": 0.115127
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_delete_response_loss_replays_success",
+      "status": "passed",
+      "seconds": 0.05854
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_exhausted_mutation_can_be_resolved_from_durable_receipt",
+      "status": "passed",
+      "seconds": 0.057257
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_invalid_idempotency_header_is_rejected_without_writing",
+      "status": "passed",
+      "seconds": 0.041761
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_legacy_unkeyed_contract_is_preserved",
+      "status": "passed",
+      "seconds": 0.06654
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_post_response_loss_reuses_one_automatically_generated_key",
+      "status": "passed",
+      "seconds": 0.076893
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_receipt_current_generation_does_not_disclose_a_different_owner",
+      "status": "passed",
+      "seconds": 0.065268
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_receipt_current_generation_tracks_cancellation_and_same_owner_rebooking",
+      "status": "passed",
+      "seconds": 0.083487
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_receipt_scope_separates_owners_and_services",
+      "status": "passed",
+      "seconds": 0.123539
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_restart_preserves_reservations_and_operation_receipts",
+      "status": "passed",
+      "seconds": 0.086986
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_same_key_different_request_is_rejected_without_modification",
+      "status": "passed",
+      "seconds": 0.072162
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_simultaneous_http_requests_have_one_slot_winner",
+      "status": "passed",
+      "seconds": 0.260549
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_simultaneous_http_requests_preserve_owner_limit",
+      "status": "passed",
+      "seconds": 0.175578
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_stale_compensation_cannot_delete_a_replacement_reservation",
+      "status": "passed",
+      "seconds": 0.066557
+    },
+    {
+      "id": "test_reservation_reliability.ReservationReliabilityTests.test_successful_historical_delete_replay_does_not_delete_replacement",
+      "status": "passed",
+      "seconds": 0.088576
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_failed_delete_receipt_write_rolls_back_cancellation",
+      "status": "passed",
+      "seconds": 0.031791
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_foreign_key_constraint_is_enabled_on_every_connection",
+      "status": "passed",
+      "seconds": 0.017917
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_original_schema_migration_preserves_legacy_reservation",
+      "status": "passed",
+      "seconds": 0.061166
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_reservation_and_receipt_are_committed_atomically",
+      "status": "passed",
+      "seconds": 0.035226
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_simultaneous_reservation_has_exactly_one_winner",
+      "status": "passed",
+      "seconds": 0.276519
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_simultaneous_same_operation_replays_one_creation",
+      "status": "passed",
+      "seconds": 0.32412
+    },
+    {
+      "id": "test_reservation_reliability.ReservationStoreConcurrencyTests.test_simultaneous_same_owner_never_exceeds_limit",
+      "status": "passed",
+      "seconds": 0.311318
+    },
+    {
+      "id": "test_talk.TalkIntegrationTests.test_registration_messaging_listing_and_quit",
+      "status": "passed",
+      "seconds": 0.502108
+    },
+    {
+      "id": "test_talk.TalkIntegrationTests.test_unknown_command_and_registration_requirement",
+      "status": "passed",
+      "seconds": 0.516123
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_abrupt_disconnect_releases_name_and_can_reconnect",
+      "status": "passed",
+      "seconds": 0.168041
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_actual_cli_eof_before_registration_exits_promptly",
+      "status": "passed",
+      "seconds": 0.168404
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_actual_cli_exits_on_registration_timeout_without_console_input",
+      "status": "passed",
+      "seconds": 0.678694
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_actual_cli_exits_when_server_stops_while_console_input_is_blocked",
+      "status": "passed",
+      "seconds": 0.197324
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_actual_cli_registers_sends_lists_and_quits",
+      "status": "passed",
+      "seconds": 0.145894
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_actual_cli_retries_invalid_name_and_preserves_unicode",
+      "status": "passed",
+      "seconds": 0.149204
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_client_close_wakes_actual_receiver_without_reader_lock_deadlock",
+      "status": "passed",
+      "seconds": 0.058221
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_confirmation_precedes_concurrent_broadcast",
+      "status": "passed",
+      "seconds": 0.098118
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_connection_limit_rejects_before_creating_extra_handler",
+      "status": "passed",
+      "seconds": 0.118117
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_exact_byte_limit_is_accepted",
+      "status": "passed",
+      "seconds": 0.080645
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_invalid_command_arguments_preserve_original_responses",
+      "status": "passed",
+      "seconds": 0.067244
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_invalid_limits_are_rejected_before_binding",
+      "status": "passed",
+      "seconds": 0.000138
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_invalid_utf8_is_rejected_without_changing_identity",
+      "status": "passed",
+      "seconds": 0.023208
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_name_validation_counts_utf8_bytes_and_rejects_controls",
+      "status": "passed",
+      "seconds": 0.064186
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_oversized_terminated_and_unterminated_frames_are_closed",
+      "status": "passed",
+      "seconds": 0.045251
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_partial_input_does_not_extend_registration_deadline",
+      "status": "passed",
+      "seconds": 0.229763
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_registration_deadline_reclaims_connection",
+      "status": "passed",
+      "seconds": 0.163762
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_repeated_start_and_teardown_leaves_no_connection_threads",
+      "status": "passed",
+      "seconds": 0.533693
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_send_deadline_counts_failure_not_successful_delivery",
+      "status": "passed",
+      "seconds": 0.215342
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_server_shutdown_wakes_registered_and_unregistered_connections",
+      "status": "passed",
+      "seconds": 0.105083
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_simultaneous_name_registration_has_one_winner",
+      "status": "passed",
+      "seconds": 0.068583
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_split_multibyte_and_coalesced_commands_keep_frames",
+      "status": "passed",
+      "seconds": 0.05854
+    },
+    {
+      "id": "test_talk_resilience.BoundedTalkTests.test_stalled_peer_does_not_block_healthy_broadcast_receivers",
+      "status": "passed",
+      "seconds": 0.066792
+    }
+  ],
+  "scope": "Temporary local TCP/HTTP servers, temporary SQLite databases, controlled faults, real CLI subprocesses. No external APIs.",
+  "process_id_not_published": true
+}

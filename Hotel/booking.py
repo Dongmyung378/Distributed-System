@@ -5,9 +5,19 @@ from __future__ import annotations
 
 import configparser
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
-from exceptions import SlotUnavailableError
+from exceptions import (
+    BadRequestError,
+    BadSlotError,
+    InvalidTokenError,
+    NotProcessedError,
+    ReservationLimitError,
+    SlotUnavailableError,
+    StaleReservationError,
+)
+from recovery import RecoveryJournal, Workflow, WorkflowBusyError, client_scope
 from reservationapi import ReservationApi
 
 ROOT = Path(__file__).resolve().parent
@@ -138,40 +148,406 @@ def cleanup_reservations(clients: dict[str, ReservationApi]) -> None:
     print("Cleanup complete.")
 
 
-def reserve_best_match(clients: dict[str, ReservationApi]) -> None:
-    held = current_reservations(clients)
-    already_matched = sorted(set(held["hotel"]) & set(held["band"]))
-    if already_matched:
-        print(f"Already matched on slot {already_matched[0]}.")
-        cleanup_reservations(clients)
+@dataclass(frozen=True)
+class RecoverySummary:
+    matched: int = 0
+    aborted: int = 0
+    unresolved: int = 0
+
+
+@dataclass
+class _Outcome:
+    result: str
+    error: Exception | None = None
+    status: int | None = None
+    reason: str = ""
+
+
+_REJECTED = (
+    BadRequestError,
+    BadSlotError,
+    InvalidTokenError,
+    NotProcessedError,
+    ReservationLimitError,
+    SlotUnavailableError,
+)
+
+
+def _receipt_outcome(
+    client: ReservationApi, operation_id: str, method: str, slot_id: int
+) -> _Outcome | None:
+    try:
+        receipt = client.get_operation(operation_id)
+    except Exception:  # noqa: BLE001 - a failed lookup leaves the outcome uncertain
+        return None
+    if not isinstance(receipt, dict) or not receipt:
+        return None
+    # Treat malformed or mismatched receipts as uncertain, never as permission
+    # to remove a reservation. No credentials or exception text enter the log.
+    if (
+        receipt.get("operation_id") != operation_id
+        or receipt.get("method") != method
+        or str(receipt.get("slot_id")) != str(slot_id)
+        or not isinstance(receipt.get("status"), int)
+    ):
+        return None
+    status = receipt["status"]
+    if 200 <= status < 300:
+        if method == "POST" and receipt.get("reservation_operation_id") != operation_id:
+            return None
+        return _Outcome("success", status=status)
+    if 400 <= status < 500:
+        body = receipt.get("body")
+        reason = str(body.get("error", "")) if isinstance(body, dict) else ""
+        return _Outcome("rejected", status=status, reason=reason)
+    return None
+
+
+def _request_outcome(
+    client: ReservationApi,
+    workflow: Workflow,
+    operation_id: str,
+    *,
+    release: bool = False,
+    resolve_first: bool = False,
+    expected_operation_id: str | None = None,
+) -> _Outcome:
+    method = "DELETE" if release else "POST"
+    if resolve_first:
+        receipt = _receipt_outcome(client, operation_id, method, workflow.slot_id)
+        if receipt is not None:
+            return receipt
+    try:
+        if release:
+            client.release_slot(
+                workflow.slot_id,
+                operation_id=operation_id,
+                expected_operation_id=expected_operation_id
+                or workflow.hotel_operation_id,
+            )
+        else:
+            client.reserve_slot(workflow.slot_id, operation_id=operation_id)
+        return _Outcome("success")
+    except _REJECTED as error:
+        receipt = _receipt_outcome(client, operation_id, method, workflow.slot_id)
+        if receipt is not None:
+            receipt.error = error
+            return receipt
+        # An authentication rejection or a legacy endpoint's 404 does not
+        # establish the outcome of an earlier request whose response was lost.
+        return _Outcome("unknown", error)
+    except Exception as error:  # noqa: BLE001 - preserve uncertain writes for recovery
+        receipt = _receipt_outcome(client, operation_id, method, workflow.slot_id)
+        return receipt or _Outcome("unknown", error)
+
+
+def _transition(
+    journal: RecoveryJournal,
+    workflow: Workflow,
+    state: str,
+    detail: str,
+    error: Exception | None = None,
+) -> None:
+    workflow.state = state
+    workflow.last_error = type(error).__name__ if error else ""
+    journal.save(workflow, detail)
+
+
+def _release_owned(
+    clients: dict[str, ReservationApi],
+    journal: RecoveryJournal,
+    workflow: Workflow,
+    service: str,
+) -> bool:
+    operation_id = (
+        workflow.hotel_release_id if service == "hotel" else workflow.band_release_id
+    )
+    creation_id = (
+        workflow.hotel_operation_id
+        if service == "hotel"
+        else workflow.band_operation_id
+    )
+    journal.save(workflow, f"{service}_release_intent")
+    outcome = _request_outcome(
+        clients[service],
+        workflow,
+        operation_id,
+        release=True,
+        resolve_first=True,
+        expected_operation_id=creation_id,
+    )
+    # 404 means the original is gone. A guarded 409 means the slot now belongs
+    # to a different reservation, which must be left untouched. A malformed
+    # key conflict is not treated as a stale-reservation result.
+    gone = outcome.result == "rejected" and (
+        isinstance(outcome.error, StaleReservationError)
+        or outcome.status == 404
+        or (outcome.status == 409 and outcome.reason == "stale_reservation")
+    )
+    if outcome.result == "success" or gone:
+        journal.save(workflow, f"{service}_compensation_confirmed")
+        return True
+    _transition(
+        journal,
+        workflow,
+        workflow.state,
+        f"{service}_compensation_unresolved",
+        outcome.error,
+    )
+    return False
+
+
+def _compensate(
+    clients: dict[str, ReservationApi], journal: RecoveryJournal, workflow: Workflow
+) -> bool:
+    _transition(journal, workflow, "compensating", "hotel_compensation_required")
+    if _release_owned(clients, journal, workflow, "hotel"):
+        _transition(journal, workflow, "aborted", "compensation_complete")
+        return True
+    return False
+
+
+def _compensate_pair(
+    clients: dict[str, ReservationApi], journal: RecoveryJournal, workflow: Workflow
+) -> bool:
+    _transition(journal, workflow, "pair_compensating", "pair_compensation_required")
+    hotel = _release_owned(clients, journal, workflow, "hotel")
+    band = _release_owned(clients, journal, workflow, "band")
+    if hotel and band:
+        _transition(journal, workflow, "aborted", "pair_compensation_complete")
+        return True
+    return False
+
+
+def _reservation_current(
+    client: ReservationApi, operation_id: str, slot_id: int
+) -> bool | None:
+    try:
+        receipt = client.get_operation(operation_id)
+    except Exception:  # noqa: BLE001 - a failed read cannot authorize compensation
+        return None
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("operation_id") != operation_id
+        or receipt.get("method") != "POST"
+        or str(receipt.get("slot_id")) != str(slot_id)
+        or receipt.get("status") != 200
+        or receipt.get("reservation_operation_id") != operation_id
+        or not isinstance(receipt.get("reservation_current"), bool)
+    ):
+        return None
+    return receipt["reservation_current"]
+
+
+def _finish_pair(
+    clients: dict[str, ReservationApi], journal: RecoveryJournal, workflow: Workflow
+) -> bool:
+    _transition(journal, workflow, "pair_check", "current_reservations_check")
+    hotel = _reservation_current(
+        clients["hotel"], workflow.hotel_operation_id, workflow.slot_id
+    )
+    band = _reservation_current(
+        clients["band"], workflow.band_operation_id, workflow.slot_id
+    )
+    if hotel is None or band is None:
+        journal.save(workflow, "current_reservation_check_unresolved")
+        return False
+    if hotel and band:
+        _transition(journal, workflow, "matched", "current_matching_pair_confirmed")
+        return True
+    _compensate_pair(clients, journal, workflow)
+    return False
+
+
+def _report_pending(journal: RecoveryJournal, message: str) -> None:
+    print(message)
+    if journal.path is None:
+        print(
+            "This in-memory journal lasts only for this call. Use the CLI or pass "
+            "RecoveryJournal(path) to retain unresolved work for restart recovery."
+        )
+
+
+def _recover_one(
+    clients: dict[str, ReservationApi], journal: RecoveryJournal, workflow: Workflow
+) -> None:
+    if workflow.state == "hotel_pending":
+        outcome = _request_outcome(
+            clients["hotel"], workflow, workflow.hotel_operation_id, resolve_first=True
+        )
+        if outcome.result == "unknown":
+            _transition(
+                journal,
+                workflow,
+                "hotel_pending",
+                "hotel_outcome_unknown",
+                outcome.error,
+            )
+            return
+        if outcome.result == "rejected":
+            _transition(journal, workflow, "aborted", "hotel_reserve_rejected")
+            return
+        _transition(journal, workflow, "hotel_reserved", "hotel_reserve_confirmed")
+    if workflow.state == "hotel_reserved":
+        # A restart before the band intent aborts this interrupted candidate.
+        # It does not create a new band booking without the user's action.
+        _compensate(clients, journal, workflow)
+    elif workflow.state == "band_pending":
+        hotel_current = _reservation_current(
+            clients["hotel"], workflow.hotel_operation_id, workflow.slot_id
+        )
+        if hotel_current is None:
+            journal.save(workflow, "hotel_current_reservation_unknown")
+            return
+        outcome = _request_outcome(
+            clients["band"], workflow, workflow.band_operation_id, resolve_first=True
+        )
+        if outcome.result == "success":
+            if hotel_current:
+                _finish_pair(clients, journal, workflow)
+            else:
+                _compensate_pair(clients, journal, workflow)
+        elif outcome.result == "rejected":
+            _compensate(clients, journal, workflow)
+        else:
+            _transition(
+                journal, workflow, "band_pending", "band_outcome_unknown", outcome.error
+            )
+    elif workflow.state == "compensating":
+        _compensate(clients, journal, workflow)
+    elif workflow.state == "pair_check":
+        _finish_pair(clients, journal, workflow)
+    elif workflow.state == "pair_compensating":
+        _compensate_pair(clients, journal, workflow)
+
+
+def recover_pending(
+    clients: dict[str, ReservationApi],
+    journal: RecoveryJournal,
+    *,
+    announce: bool = True,
+) -> RecoverySummary:
+    """Resolve this account's attempts; retain all uncertain outcomes for retry."""
+    with journal.locked():
+        counts = {"matched": 0, "aborted": 0, "unresolved": 0}
+        for workflow in journal.pending(client_scope(clients)):
+            _recover_one(clients, journal, workflow)
+            key = (
+                workflow.state
+                if workflow.state in ("matched", "aborted")
+                else "unresolved"
+            )
+            counts[key] += 1
+        summary = RecoverySummary(**counts)
+        if announce and any(counts.values()):
+            print(
+                f"Recovery: {summary.matched} matched, {summary.aborted} rolled back, "
+                f"{summary.unresolved} unresolved."
+            )
+            if summary.unresolved:
+                print(
+                    "Unresolved attempts remain recorded; retry when the API is reachable."
+                )
+        return summary
+
+
+def reserve_best_match(
+    clients: dict[str, ReservationApi], *, journal: RecoveryJournal | None = None
+) -> None:
+    """Reserve the earliest available pair without deleting unrelated holdings."""
+    if journal is None:
+        with RecoveryJournal() as temporary_journal:
+            reserve_best_match(clients, journal=temporary_journal)
         return
+    with journal.locked():
+        recover_pending(clients, journal)
+        if journal.pending(client_scope(clients)):
+            print(
+                "Resolve the pending booking before starting another automatic attempt."
+            )
+            return
+        held = current_reservations(clients)
+        already_matched = sorted(set(held["hotel"]) & set(held["band"]))
+        if already_matched:
+            print(f"Already matched on slot {already_matched[0]}.")
+            return
+        candidates = matching_slots(clients)
+        if not candidates:
+            print("No matching slot is currently available.")
+            return
 
-    cleanup_reservations(clients)
-    candidates = matching_slots(clients)
-    if not candidates:
-        print("No matching slot is currently available.")
-        return
+        for slot_id in candidates:
+            workflow = journal.create(client_scope(clients), slot_id)
+            hotel = _request_outcome(
+                clients["hotel"], workflow, workflow.hotel_operation_id
+            )
+            if hotel.result == "unknown":
+                _transition(
+                    journal,
+                    workflow,
+                    "hotel_pending",
+                    "hotel_outcome_unknown",
+                    hotel.error,
+                )
+                _report_pending(
+                    journal, "Hotel outcome is unresolved and recorded for recovery."
+                )
+                return
+            if hotel.result == "rejected":
+                _transition(journal, workflow, "aborted", "hotel_reserve_rejected")
+                if isinstance(hotel.error, SlotUnavailableError) or hotel.status == 409:
+                    continue
+                if hotel.error:
+                    raise hotel.error
+                print("Hotel reservation was rejected.")
+                return
 
-    for slot_id in candidates:
-        try:
-            clients["hotel"].reserve_slot(slot_id)
-        except SlotUnavailableError:
-            continue
-
-        try:
-            clients["band"].reserve_slot(slot_id)
-        except SlotUnavailableError:
-            clients["hotel"].release_slot(slot_id)
-            continue
-        except Exception:
-            clients["hotel"].release_slot(slot_id)
-            raise
-
-        cleanup_reservations(clients)
-        print(f"Reserved matching hotel and band slot {slot_id}.")
-        return
-
-    print("Matching slots changed before they could be reserved; try again.")
+            _transition(journal, workflow, "hotel_reserved", "hotel_reserve_confirmed")
+            _transition(journal, workflow, "band_pending", "band_reserve_intent")
+            band = _request_outcome(
+                clients["band"], workflow, workflow.band_operation_id
+            )
+            if band.result == "unknown":
+                _transition(
+                    journal,
+                    workflow,
+                    "band_pending",
+                    "band_outcome_unknown",
+                    band.error,
+                )
+                _report_pending(
+                    journal,
+                    "Band outcome is unresolved; both results are recorded for recovery.",
+                )
+                return
+            if band.result == "rejected":
+                if not _compensate(clients, journal, workflow):
+                    _report_pending(
+                        journal,
+                        "Hotel rollback is unresolved and recorded for recovery.",
+                    )
+                    return
+                if isinstance(band.error, SlotUnavailableError) or band.status == 409:
+                    continue
+                if band.error:
+                    raise band.error
+                print(
+                    "Band reservation was rejected; hotel reservation was rolled back."
+                )
+                return
+            if _finish_pair(clients, journal, workflow):
+                print(f"Reserved matching hotel and band slot {slot_id}.")
+            elif workflow.state == "aborted":
+                print(
+                    "The matching reservations changed; this attempt was safely rolled back."
+                )
+            else:
+                _report_pending(
+                    journal,
+                    "Current reservations are unresolved and recorded for recovery.",
+                )
+            return
+        print("Matching slots changed before they could be reserved; try again.")
 
 
 def print_menu() -> None:
@@ -190,18 +566,18 @@ def print_menu() -> None:
     )
 
 
-def main() -> None:
-    clients = create_clients(load_config())
+def _run_menu(clients: dict[str, ReservationApi], journal: RecoveryJournal) -> None:
     actions = {
         "1": show_reservations,
         "2": show_available,
         "3": reserve_manually,
         "4": cancel_manually,
         "5": show_matching,
-        "6": reserve_best_match,
+        "6": lambda active_clients: reserve_best_match(active_clients, journal=journal),
         "7": cleanup_reservations,
     }
     print("Wedding Planner connected.")
+    recover_pending(clients, journal)
     while True:
         print_menu()
         choice = input("Choose an option: ").strip()
@@ -216,6 +592,26 @@ def main() -> None:
             action(clients)
         except Exception as error:  # noqa: BLE001 - keep the interactive CLI running
             print(f"Operation failed: {error}")
+
+
+def main() -> None:
+    config = load_config()
+    clients = create_clients(config)
+    configured_path = os.getenv(
+        "BOOKING_JOURNAL_PATH",
+        config.get("global", "journal", fallback="data/booking-journal.db"),
+    )
+    journal_path = Path(configured_path)
+    if not journal_path.is_absolute():
+        journal_path = ROOT / journal_path
+    with RecoveryJournal(journal_path) as journal:
+        try:
+            # One active interactive planner per journal. A process crash
+            # releases the OS lock automatically before startup recovery.
+            with journal.locked():
+                _run_menu(clients, journal)
+        except WorkflowBusyError as error:
+            print(f"Planner not started: {error}")
 
 
 if __name__ == "__main__":

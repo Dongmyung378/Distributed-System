@@ -1,0 +1,232 @@
+{
+  "schema": "network-systems-comparison/v1",
+  "initial_revision": "1504ab3ba2db4191a7d1363642d28420016bc0b1",
+  "aggregation": "Sum delivery counts; median of three trial-level latency percentiles/resource peaks. All raw trial samples retained.",
+  "healthy": [
+    {
+      "clients_receiving": 2,
+      "initial": {
+        "trials": 3,
+        "expected_deliveries": 120,
+        "observed_deliveries": 120,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 0.1136,
+        "median_delivery_p95_ms": 0.1528,
+        "median_elapsed_seconds": 0.021318,
+        "median_trial_cpu_seconds": 0.0,
+        "median_trial_wall_seconds": 0.02746,
+        "median_harness_peak_threads": 7,
+        "median_harness_peak_rss_mib": 20.992,
+        "server_source_sha256": [
+          "811e0046c0fe6299ed1df96120051a849a95d52182e26b583aa22c9ffcb65276"
+        ]
+      },
+      "final": {
+        "trials": 3,
+        "expected_deliveries": 120,
+        "observed_deliveries": 120,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 0.1863,
+        "median_delivery_p95_ms": 0.2434,
+        "median_elapsed_seconds": 0.021257,
+        "median_trial_cpu_seconds": 0.015625,
+        "median_trial_wall_seconds": 0.032297,
+        "median_harness_peak_threads": 9,
+        "median_harness_peak_rss_mib": 21.582,
+        "server_source_sha256": [
+          "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb"
+        ]
+      }
+    },
+    {
+      "clients_receiving": 10,
+      "initial": {
+        "trials": 3,
+        "expected_deliveries": 600,
+        "observed_deliveries": 600,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 0.2267,
+        "median_delivery_p95_ms": 0.3604,
+        "median_elapsed_seconds": 0.020406,
+        "median_trial_cpu_seconds": 0.0,
+        "median_trial_wall_seconds": 0.027471,
+        "median_harness_peak_threads": 23,
+        "median_harness_peak_rss_mib": 21.672,
+        "server_source_sha256": [
+          "811e0046c0fe6299ed1df96120051a849a95d52182e26b583aa22c9ffcb65276"
+        ]
+      },
+      "final": {
+        "trials": 3,
+        "expected_deliveries": 600,
+        "observed_deliveries": 600,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 0.4541,
+        "median_delivery_p95_ms": 0.6362,
+        "median_elapsed_seconds": 0.021498,
+        "median_trial_cpu_seconds": 0.0625,
+        "median_trial_wall_seconds": 0.032354,
+        "median_harness_peak_threads": 33,
+        "median_harness_peak_rss_mib": 23.23,
+        "server_source_sha256": [
+          "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb"
+        ]
+      }
+    },
+    {
+      "clients_receiving": 30,
+      "initial": {
+        "trials": 3,
+        "expected_deliveries": 1800,
+        "observed_deliveries": 1800,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 0.482,
+        "median_delivery_p95_ms": 0.9054,
+        "median_elapsed_seconds": 0.02284,
+        "median_trial_cpu_seconds": 0.03125,
+        "median_trial_wall_seconds": 0.032864,
+        "median_harness_peak_threads": 63,
+        "median_harness_peak_rss_mib": 23.508,
+        "server_source_sha256": [
+          "811e0046c0fe6299ed1df96120051a849a95d52182e26b583aa22c9ffcb65276"
+        ]
+      },
+      "final": {
+        "trials": 3,
+        "expected_deliveries": 1800,
+        "observed_deliveries": 1800,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 1.1389,
+        "median_delivery_p95_ms": 1.5795,
+        "median_elapsed_seconds": 0.043439,
+        "median_trial_cpu_seconds": 0.078125,
+        "median_trial_wall_seconds": 0.059545,
+        "median_harness_peak_threads": 93,
+        "median_harness_peak_rss_mib": 27.43,
+        "server_source_sha256": [
+          "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb"
+        ]
+      }
+    },
+    {
+      "clients_receiving": 60,
+      "initial": {
+        "trials": 3,
+        "expected_deliveries": 3600,
+        "observed_deliveries": 3600,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 0.8942,
+        "median_delivery_p95_ms": 1.6338,
+        "median_elapsed_seconds": 0.043269,
+        "median_trial_cpu_seconds": 0.078125,
+        "median_trial_wall_seconds": 0.060083,
+        "median_harness_peak_threads": 123,
+        "median_harness_peak_rss_mib": 26.129,
+        "server_source_sha256": [
+          "811e0046c0fe6299ed1df96120051a849a95d52182e26b583aa22c9ffcb65276"
+        ]
+      },
+      "final": {
+        "trials": 3,
+        "expected_deliveries": 3600,
+        "observed_deliveries": 3600,
+        "missing_deliveries": 0,
+        "duplicate_deliveries": 0,
+        "protocol_errors": 0,
+        "attempted_broadcasts": 60,
+        "submitted_broadcasts": 60,
+        "median_delivery_p50_ms": 2.2544,
+        "median_delivery_p95_ms": 3.202,
+        "median_elapsed_seconds": 0.072498,
+        "median_trial_cpu_seconds": 0.109375,
+        "median_trial_wall_seconds": 0.095967,
+        "median_harness_peak_threads": 183,
+        "median_harness_peak_rss_mib": 33.707,
+        "server_source_sha256": [
+          "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb"
+        ]
+      }
+    }
+  ],
+  "slow": {
+    "clients_receiving": 3,
+    "initial": {
+      "trials": 3,
+      "expected_deliveries": 2700,
+      "observed_deliveries": 9,
+      "missing_deliveries": 2691,
+      "duplicate_deliveries": 0,
+      "protocol_errors": 0,
+      "attempted_broadcasts": 144,
+      "submitted_broadcasts": 141,
+      "median_delivery_p50_ms": 0.3663,
+      "median_delivery_p95_ms": 0.3972,
+      "median_elapsed_seconds": 5.991833,
+      "median_trial_cpu_seconds": 0.03125,
+      "median_trial_wall_seconds": 5.991974,
+      "median_harness_peak_threads": 10,
+      "median_harness_peak_rss_mib": 21.258,
+      "server_source_sha256": [
+        "811e0046c0fe6299ed1df96120051a849a95d52182e26b583aa22c9ffcb65276"
+      ]
+    },
+    "final": {
+      "trials": 3,
+      "expected_deliveries": 2700,
+      "observed_deliveries": 2700,
+      "missing_deliveries": 0,
+      "duplicate_deliveries": 0,
+      "protocol_errors": 0,
+      "attempted_broadcasts": 900,
+      "submitted_broadcasts": 900,
+      "median_delivery_p50_ms": 0.3703,
+      "median_delivery_p95_ms": 0.5307,
+      "median_elapsed_seconds": 1.630161,
+      "median_trial_cpu_seconds": 0.203125,
+      "median_trial_wall_seconds": 1.630443,
+      "median_harness_peak_threads": 14,
+      "median_harness_peak_rss_mib": 22.719,
+      "server_source_sha256": [
+        "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb"
+      ]
+    }
+  },
+  "limits": [
+    "Slow-peer fixture uses a small receive/send buffer and 300 broadcasts at 5ms intervals.",
+    "Published defaults are retained: final queue128/send_timeout2s; the initial version has no corresponding bounds.",
+    "Percentiles describe observed deliveries; always read missing-delivery counts alongside them.",
+    "Healthy trials use5warmup+20measured broadcasts, with delivery completion before each next broadcast.",
+    "Normal concurrent desktop workloads were not excluded.",
+    "Initial slow missing counts include broadcasts never submitted due to backpressure; they are not a packet-loss rate.",
+    "Resource metrics include server, client and measurement harness in the same process.",
+    "These measurements prioritize fault isolation; healthy latency and thread count increase."
+  ]
+}

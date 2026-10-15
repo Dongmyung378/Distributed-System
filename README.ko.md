@@ -1,288 +1,153 @@
-# 분산 채팅 및 예약 시스템
+# 분산 채팅과 예약 시스템 (Distributed Chat and Reservation Systems)
 
 [English](README.md) | [한국어](README.ko.md)
 
-동시 TCP 메시징을 지원하는 대화 서버와 호텔·밴드의 공통 시간대를 관리하는 예약 시스템입니다. Python으로 네트워크 프로토콜, 영속 상태, 예약 충돌 제어, 보상 트랜잭션 및 교차 플랫폼 통합 테스트를 구현합니다.
+**Talk**는 여러 사용자의 TCP 메시지를 처리하고, **Hotel Wedding Planner**는 HTTP와 SQLite로 호텔 예약과 밴드 예약을 조율합니다. 두 애플리케이션은 하나의 저장소에서 서로 다른 네트워크 장애와 일관성 문제를 다룹니다. 세션이나 데이터베이스를 공유하는 하나의 서비스는 아닙니다.
 
-## 핵심 구현
+최초 개발 기간은 **2024년 10월부터 12월**입니다. 안정성 보강과 재현성 개선은 **2026년 10월**의 후속 작업으로 구분했습니다. 초기 소스는 `1504ab3` 커밋을 포함한 Git 이력에 보존했습니다.
 
-| 영역 | 구현 내용 |
-|---|---|
-| 동시 메시징 | 연결마다 독립 스레드를 사용하는 TCP 서버와 동기화된 공유 상태 |
-| 텍스트 프로토콜 | 등록, 전체 메시지, 개인 메시지, 사용자 조회, 정상 종료 |
-| HTTP 서비스 | 기존 클라이언트 계약과 호환되는 로컬 Hotel/Band API |
-| 영속성 | 스키마 및 슬롯을 자동 생성하는 SQLite 예약 저장소 |
-| 충돌 제어 | 트랜잭션과 유일성 제약으로 이중 예약 방지 |
-| 서비스 간 일관성 | Band 예약 실패 시 앞서 생성한 Hotel 예약을 해제하는 보상 처리 |
-| 회복성 | timeout, 제한적 재시도, 상태 코드별 예외, 매번 최신 상태 조회 |
-| 검증 | 실제 TCP·HTTP 소켓을 사용하는 자동 통합 테스트 |
+## 결과와 검증 자료
 
-## 아키텍처
+실제 TCP와 HTTP, 동시 예약, 응답 유실, 보상 취소, 프로세스 종료와 재시작을 포함한 **85개 검사를 4개 환경에서 모두 통과**했습니다. 총 340회 실행에서 실패와 오류, 생략은 0건이며, 초기 5개 검사도 유지했습니다.
 
-### Talk
+느린 연결 1개와 정상 수신자 3개를 둔 같은 실험을 각 버전에서 3회 수행했습니다. 계획한 수신은 매회 900건이며 **초기 3건에서 개선 후 900건**으로 늘었습니다. 초기에는 300회 방송 중 48회만 시도하고 47회를 소켓에 전송했으므로 미완료 관찰을 메시지 유실률로 해석할 수 없습니다. 정상 60개 연결의 회차별 p95 중앙값은 **1.6338ms에서 3.2020ms**로 증가했습니다. 자원 사용 수치는 서버와 측정 클라이언트를 함께 포함합니다.
 
-```mermaid
-flowchart LR
-    A[채팅 클라이언트: Alice] -->|줄 단위 TCP 프로토콜| S[멀티스레드 채팅 서버]
-    B[채팅 클라이언트: Bob] -->|줄 단위 TCP 프로토콜| S
-    C[추가 클라이언트] -->|줄 단위 TCP 프로토콜| S
-    S --> L[잠금으로 보호되는 연결·사용자 레지스트리]
-    S -->|전체 또는 개인 메시지| A
-    S -->|전체 또는 개인 메시지| B
-    S -->|전체 또는 개인 메시지| C
-```
+검증 환경은 **Windows Python 3.10.22 / 3.12.7, WSL Ubuntu Python 3.10.22 / 3.12.3**입니다. 각각 분리한 가상환경에서 잠금 파일로 의존성을 설치했습니다. Linux는 별도 소스 복사본을 사용했으며, 4개 환경의 소스 해시가 일치합니다. WSL은 같은 물리 컴퓨터를 사용합니다. GitHub Actions 성공을 주장하는 결과는 아닙니다.
 
-각 연결은 독립적인 서버 스레드가 처리합니다. 재진입 잠금이 등록 및 연결 상태를 보호하며, 각 클라이언트 핸들러는 해당 소켓 쓰기를 직렬화합니다.
+측정 범위는 로컬 루프백 통신과 통제된 장애 조건입니다. 인터넷 지연이나 운영 환경의 최대 처리 용량을 의미하지 않습니다. [검증 요약](docs/reports/verification-summary.json), [초기 측정](docs/reports/initial-benchmark.json), [개선 후 측정](docs/reports/final-benchmark.json), [비교 결과](docs/reports/comparison.json)에서 조건과 원자료를 확인할 수 있습니다. GitHub Actions 설정의 존재와 실제 실행 성공은 구분하며, 실행 기록 없이 CI 성공을 주장하지 않습니다.
 
-### Hotel Wedding Planner
+![채팅 비교 측정](docs/figures/performance.ko.svg)
 
-```mermaid
-flowchart LR
-    CLI[Wedding Planner CLI] -->|ReservationApi + Bearer 토큰| H[Hotel HTTP 엔드포인트]
-    CLI -->|ReservationApi + Bearer 토큰| B[Band HTTP 엔드포인트]
-    H --> API[로컬 멀티스레드 예약 서버]
-    B --> API
-    API -->|트랜잭션 읽기·쓰기| DB[(SQLite)]
-    CLI -. Hotel 예약 롤백 .-> H
-```
+![독립 애플리케이션의 실행 구조](docs/figures/architecture.ko.svg)
 
-Hotel과 Band는 하나의 로컬 HTTP 프로세스가 제공하는 독립 리소스입니다. SQLite가 데이터를 영속화하고 경쟁 쓰기를 직렬화합니다. 두 리소스가 하나의 원자적 트랜잭션을 공유한다고 가정하지 않고, CLI가 보상 작업으로 두 예약을 조정합니다.
+## 보존한 기능과 개선 내용
 
-## 저장소 구조
-
-```text
-Distributed-System/
-├── Hotel/
-│   ├── api.ini             # 로컬 API, 토큰, 재시도, DB 설정
-│   ├── booking.py          # Wedding Planner CLI
-│   ├── exceptions.py       # 상태 코드별 클라이언트 예외
-│   ├── local_api.py        # 멀티스레드 Hotel/Band HTTP 서비스
-│   └── reservationapi.py   # 재시도 기능이 있는 HTTP 클라이언트
-├── Talk/
-│   ├── commands.json       # 채팅 프로토콜 예제
-│   ├── myclient.py         # 대화형 TCP 채팅 클라이언트
-│   └── myserver.py         # 동시 TCP 채팅 서버
-├── tests/
-│   ├── test_hotel.py       # HTTP 및 Planner 통합 테스트
-│   └── test_talk.py        # TCP 프로토콜 통합 테스트
-├── .github/workflows/ci.yml # 교차 플랫폼 지속적 통합
-├── requirements-dev.txt
-├── requirements.txt
-└── README.md               # 영문 메인 문서
-```
-
-## 요구 사항
-
-- Python 3.10 이상
-- Talk용 로컬 TCP 포트 `8090`
-- Hotel용 로컬 HTTP 포트 `8081`
+| 구성 | 유지한 초기 기능 | 보강한 부분 |
+| --- | --- | --- |
+| Talk | 등록, 전체 전송, 개인 전송, 사용자 목록, 종료, 줄바꿈 프로토콜, 연결별 수신 스레드 | 입력과 연결 수 제한, 등록 대기시간 제한, 제한된 송신 큐, 느린 수신자 격리, 종료 처리 |
+| Hotel API | 예약 URL과 응답 형식, 데모 사용자, 서비스별 최대 2개 예약 | 예약 변경과 처리 기록의 원자적 저장, 멱등성 키, 처리 결과 조회, 현재 예약 세대 확인, 조건부 취소 |
+| 예약 CLI | 수동 예약과 취소, 가용 슬롯 조회, 가장 이른 공통 슬롯 예약, 사용자가 선택하는 정리 메뉴 | 파일 기반 복구 저널, 프로세스 잠금, 미확정 결과 재확인, 현재 예약 쌍 확인, 해당 작업이 생성한 예약만 보상 취소 |
 
 ## 설치
 
-저장소 루트에서 가상 환경을 만들고 의존성을 설치합니다.
+Python **3.10 이상**이 필요합니다. Talk는 표준 라이브러리만 사용하며 Hotel은 Requests를 추가로 사용합니다. Docker나 외부 호텔 및 밴드 서비스는 필요하지 않습니다.
 
-### Windows PowerShell
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 ```
 
-PowerShell 실행 정책으로 활성화가 막히면 가상 환경의 Python을 직접 사용합니다.
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### macOS/Linux
+macOS 또는 Linux:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements-lock.txt
 ```
+
+`requirements-lock.txt`에는 검증에 사용한 런타임 패키지 5개의 정확한 버전이 기록되어 있습니다. 지원 범위 안에서 의존성을 설치하는 `requirements.txt`도 유지했습니다. Ruff를 포함한 개발 도구의 검증 버전은 `requirements-dev-lock.txt`로 설치할 수 있습니다. 아래 명령의 `python`은 가상환경을 활성화한 뒤 사용하거나 가상환경 인터프리터 경로로 바꿔 실행합니다.
 
 ## Talk 실행
 
-첫 번째 터미널에서 서버를 실행합니다.
+터미널 하나에서 서버를 실행하고 다른 터미널 두 개에서 클라이언트를 실행합니다.
 
-```powershell
-python .\Talk\myserver.py
+```bash
+python Talk/myserver.py
+python Talk/myclient.py
+python Talk/myclient.py
 ```
 
-두 번째 터미널에서 클라이언트를 실행합니다.
+기본 주소는 `127.0.0.1:8090`입니다. 서로 다른 이름으로 등록한 뒤 다음 명령을 입력합니다.
 
-```powershell
-python .\Talk\myclient.py
+| 입력 예시 | 동작 |
+| --- | --- |
+| `send_all Hello everyone` | 자신을 포함한 등록 사용자 전체에 전송 |
+| `send_to Bob Hello Bob` | 접속 중인 Bob에게 개인 전송 |
+| `user_list` | 등록 사용자 목록 확인 |
+| `quit` | `Client exiting` 응답을 요청하고 연결 종료 |
+
+직접 소켓을 사용하는 클라이언트는 `register <이름>`으로 등록합니다. UTF-8 텍스트와 줄바꿈으로 메시지 경계를 구분합니다. 정상 입력에 대한 초기 명령과 응답은 유지했습니다. 과도한 크기나 잘못된 인코딩은 제한 없이 받아들이는 대신 오류를 알리고 연결을 정리합니다.
+
+| 서버 설정 | 기본값 |
+| --- | ---: |
+| 허용 연결 수 | 128개 |
+| 입력 한 줄의 최대 크기, 줄바꿈 제외 | 8,192바이트 |
+| 사용자명의 최대 크기 | UTF-8 기준 64바이트 |
+| 연결 후 등록 대기시간 | 30초 |
+| 연결별 송신 큐 | 128개 프레임 |
+| 프레임별 송신 제한시간 | 2초 |
+
+연결별 수신 스레드는 유지하고 송신 스레드를 추가했습니다. 수신을 멈춘 사용자 때문에 다른 사용자의 전송이 함께 지연되는 문제를 줄이기 위한 선택입니다. 큐가 가득 차거나 송신 제한시간을 넘기면 해당 연결을 종료합니다. `messages_enqueued`는 큐에 넣은 건수이고 `messages_sent`는 운영체제에 전체 프레임을 쓴 건수입니다. 수신자가 실제로 읽었다는 확인이나 영속적인 메시지 전달을 보장하지 않습니다. 대화 이력도 저장하지 않습니다.
+
+설정 변경 예시:
+
+```bash
+python Talk/myserver.py 127.0.0.1 9000 --max-clients 64 --registration-timeout 30 --outbound-queue-size 64 --send-timeout 2
+python Talk/myclient.py 127.0.0.1 9000
 ```
 
-다중 사용자를 확인하려면 다른 터미널에서 같은 클라이언트 명령을 한 번 더 실행합니다. 기본 주소는 `127.0.0.1:8090`입니다. 다른 주소는 두 프로그램에 함께 전달합니다.
+코드에서 사용하는 팩터리는 `create_server(host, port, **options)`입니다. `server.diagnostics()`는 대화 내용을 포함하지 않는 진단 카운터를 반환합니다.
 
-```powershell
-python .\Talk\myserver.py 0.0.0.0 9000
-python .\Talk\myclient.py 127.0.0.1 9000
+## Hotel Wedding Planner 실행
+
+첫 번째 터미널에서 API를 실행합니다.
+
+```bash
+python Hotel/local_api.py
 ```
 
-`0.0.0.0`으로 서버를 열면 운영체제 방화벽이 해당 포트를 허용하는 경우 LAN의 다른 장치도 접속할 수 있습니다.
+두 번째 터미널에서 예약 CLI를 실행합니다.
 
-### Talk 프로토콜
-
-고유한 화면 이름을 입력한 뒤 다음 명령을 사용합니다.
-
-| 명령 | 기능 | 예시 |
-|---|---|---|
-| `send_all <message>` | 등록된 모든 사용자에게 전송 | `send_all Hello everyone` |
-| `send_to <user> <message>` | 특정 사용자에게 전송 | `send_to Bob Hello Bob` |
-| `user_list` | 등록 사용자 목록 조회 | `user_list` |
-| `quit` | 서버 확인 후 연결 종료 | `quit` |
-
-화면 이름에는 공백을 사용할 수 없으며 접속 중인 두 클라이언트가 같은 이름을 등록할 수 없습니다.
-
-## Hotel 실행
-
-Hotel은 로컬 예약 API와 Wedding Planner 클라이언트를 각각 실행합니다.
-
-### 1. 예약 API 실행
-
-첫 번째 터미널에서 실행합니다.
-
-```powershell
-python .\Hotel\local_api.py
+```bash
+python Hotel/booking.py
 ```
 
-기본 실행 환경은 다음과 같습니다.
+기본 API 주소는 `127.0.0.1:8081`이며 호텔과 밴드에 각각 1번부터 100번까지 슬롯이 있습니다. 예약 DB는 `Hotel/data/reservations.db`입니다. 메뉴 6은 가장 이른 공통 슬롯을 예약하고, 메뉴 3과 4는 수동 예약과 취소를 수행합니다. **불필요한 예약을 정리하는 동작은 사용자가 메뉴 7을 선택했을 때만 실행합니다.** 자동 매칭이 별개의 수동 예약을 임의로 정리하지 않습니다.
 
-- API 서버: `http://127.0.0.1:8081`
-- Hotel 슬롯: 1~100
-- Band 슬롯: 1~100
-- 영속 데이터베이스: `Hotel/data/reservations.db`
+`Hotel/api.ini`의 사용자는 로컬 데모용입니다. `HOTEL_API_KEY`와 `BAND_API_KEY` 환경변수로 클라이언트의 사용자를 바꿀 수 있습니다. 인터넷 공개 서비스용 인증 체계는 아닙니다.
 
-예약은 서버를 재시작해도 유지됩니다. 서버를 종료한 상태에서 다음 명령으로 데이터를 초기화할 수 있습니다.
+대화형 CLI는 기본적으로 `Hotel/data/booking-journal.db`에 복구 저널을 저장합니다. `BOOKING_JOURNAL_PATH`로 경로를 바꿀 수 있으며 상대 경로는 `Hotel`을 기준으로 해석합니다. 같은 API DB와 저널, 서비스 주소와 사용자로 다시 실행하면 끝나지 않은 자동 예약 작업을 확인합니다. 파일 저널의 프로세스 잠금은 같은 저널을 두 CLI가 동시에 사용하는 것을 막습니다. 결과가 불명확한 작업은 보존하며 해당 사용자 범위의 새 자동 예약을 보류합니다.
 
-```powershell
-python .\Hotel\local_api.py --reset-data
+`reserve_best_match(clients)`를 직접 호출하면 **메모리 저널**을 사용하므로 호출이 끝난 뒤 재시작 복구가 되지 않습니다. 라이브러리에서 재시작 복구가 필요하면 `RecoveryJournal(path)`를 명시적으로 전달하고 같은 파일로 `recover_pending`을 호출해야 합니다. 수동 메뉴의 단일 요청은 자동 예약의 복구 워크플로와 구분됩니다.
+
+## HTTP 호환성과 복구 계약
+
+각 요청에는 해당 서비스의 데모 Bearer 인증정보가 필요합니다. 초기 예약 경로는 유지했습니다.
+
+| 메서드 | 경로, `service`는 `hotel` 또는 `band` | 용도 |
+| --- | --- | --- |
+| GET | `/{service}/api/reservation/available` | 가용 슬롯 조회 |
+| GET | `/{service}/api/reservation` | 현재 사용자의 예약 조회 |
+| POST | `/{service}/api/reservation/{id}` | 예약 생성 |
+| DELETE | `/{service}/api/reservation/{id}` | 보유 예약 취소 |
+| GET | `/{service}/api/operation/{operation_id}` | 사용자별 요청 처리 결과와 현재 예약 세대 조회 |
+
+Python 클라이언트는 하나의 논리적 변경 요청에 `Idempotency-Key`를 부여하고 재시도에서도 같은 키를 사용합니다. 서버는 예약 변경과 처리 결과를 하나의 SQLite 트랜잭션으로 저장합니다. 같은 요청을 재전송하면 저장된 결과를 반환하고, 같은 키로 메서드나 슬롯 또는 예상 예약 세대를 바꾸면 충돌로 처리합니다.
+
+보상 취소에는 `Expected-Reservation-Operation-Id`를 전달합니다. 같은 슬롯이 취소된 뒤 다시 예약되었더라도 이전 작업의 복구 과정이 새 예약을 삭제하지 않도록 하는 조건입니다. 과거 예약 성공 기록만으로 현재 예약을 확정하지 않으며, 복구 완료 전 호텔과 밴드의 현재 예약 세대를 각각 확인합니다.
+
+처리 기록은 자동으로 삭제하지 않습니다. 두 서비스의 예약과 조회는 하나의 분산 원자적 트랜잭션이 아닙니다. 복구가 미확정 상태로 남을 수 있고, 확인이 끝난 뒤 다른 사용자가 예약을 바꾸는 상황까지 막지는 못합니다.
+
+## 검증과 측정 재현
+
+```bash
+python -m pip install -r requirements-dev-lock.txt
+python -B scripts/verify.py --output target/verification.json
+python -m ruff check Hotel Talk tests scripts
+python -m ruff format --check Hotel Talk tests scripts
+python -B scripts/benchmark.py --project . --scenario all --trials 3 --label current-source --output target/benchmark.json
 ```
 
-호스트, 포트, 데이터베이스 경로, 최초 슬롯 개수도 변경할 수 있습니다.
+테스트는 임시 포트와 임시 DB를 사용합니다. 서버를 미리 실행하거나 외부 인증정보, GPU와 클라우드 계정을 준비할 필요가 없습니다. 초기 버전과 비교하려면 `1504ab3` 커밋을 별도 디렉터리에 내보내고 현재 벤치마크 스크립트의 `--project`로 그 경로를 전달합니다. 양쪽 모두 같은 스크립트로 측정해야 합니다.
 
-```powershell
-python .\Hotel\local_api.py --port 9001 --database .\Hotel\data\demo.db --slots 250
-```
+정상 수신 조건은 사용자 2명, 10명, 30명, 60명으로 나누고 회차별 예열 5회와 측정 20회를 사용합니다. 느린 수신자 조건은 수신을 멈춘 연결 하나에 작은 소켓 버퍼를 적용합니다. 지연 수치와 함께 누락과 중복 수를 확인해야 합니다. 일부 메시지만 도착한 결과를 낮은 지연만으로 성공이라고 평가하지 않습니다.
 
-포트를 변경했다면 `Hotel/api.ini`의 두 서비스 URL도 같은 포트로 수정해야 합니다.
+`ReservationApi`의 `max_elapsed`는 다음 재시도와 요청에 배분할 남은 시간을 제한하는 예산입니다. 개별 요청이나 전체 자동 예약이 반드시 그 시간 안에 종료된다는 **절대 실행시간 보장은 아닙니다.**
 
-### 2. Wedding Planner 실행
+## 상세 문서와 한계
 
-두 번째 터미널에서 실행합니다.
+- [설계와 장애 처리](docs/ARCHITECTURE.ko.md) / [English](docs/ARCHITECTURE.md)
+- [포트폴리오 범위와 근거](docs/PORTFOLIO.ko.md) / [English](docs/PORTFOLIO.md)
 
-```powershell
-python .\Hotel\booking.py
-```
-
-메뉴 기능은 다음과 같습니다.
-
-1. Hotel/Band의 현재 예약 조회
-2. 예약 가능한 슬롯 조회
-3. 한 서비스 수동 예약
-4. 예약 취소
-5. 두 서비스에서 모두 가능한 슬롯 조회
-6. 가장 빠른 Hotel/Band 공통 슬롯 예약
-7. 중복되거나 불필요한 예약 정리
-
-빠르게 확인하려면 새 데이터베이스에서 메뉴 `6`을 선택한 뒤 `1`을 선택합니다. Hotel과 Band 양쪽에 슬롯 `1`이 표시되어야 합니다.
-
-### 로컬 토큰
-
-`Hotel/api.ini`에는 서비스별로 두 개의 데모 사용자가 들어 있습니다. 실제 비밀 키가 아닌 로컬 테스트 데이터입니다. 환경변수로 현재 클라이언트 사용자를 바꿀 수 있습니다.
-
-```powershell
-$env:HOTEL_API_KEY = "hotel-demo-user-2"
-$env:BAND_API_KEY = "band-demo-user-2"
-python .\Hotel\booking.py
-```
-
-실제 자격 증명은 환경변수나 비밀 관리 도구에 저장하고 Git에 커밋하지 마십시오.
-
-## Hotel HTTP 계약
-
-모든 요청에는 `Authorization: Bearer <token>` 헤더가 필요합니다.
-
-| Method | Endpoint | 동작 |
-|---|---|---|
-| `GET` | `/{service}/api/reservation/available` | 예약 가능한 슬롯 조회 |
-| `GET` | `/{service}/api/reservation` | 현재 토큰이 보유한 슬롯 조회 |
-| `POST` | `/{service}/api/reservation/{id}` | 슬롯 예약 |
-| `DELETE` | `/{service}/api/reservation/{id}` | 슬롯 해제 |
-
-`service`는 `hotel` 또는 `band`입니다.
-
-| 상태 코드 | 의미 |
-|---|---|
-| `400` | 잘못된 요청 또는 슬롯 ID |
-| `401` | 누락되었거나 잘못된 토큰 |
-| `403` | 존재하지 않는 슬롯 |
-| `404` | 현재 토큰이 보유하지 않은 예약 |
-| `409` | 다른 토큰이 이미 보유한 슬롯 |
-| `451` | 예약 2개 제한 초과 |
-
-## 신뢰성과 일관성 설계
-
-- **제한된 장애 시간:** HTTP 요청에 명시적 timeout과 횟수가 제한된 점진적 재시도를 사용합니다.
-- **오래된 캐시 제거:** 모든 예약 작업이 서비스에서 최신 상태를 다시 조회합니다.
-- **쓰기 직렬화:** SQLite `BEGIN IMMEDIATE`가 경쟁 예약 쓰기를 직렬화합니다.
-- **DB 불변 조건:** `(service, slot_id)`가 예약 기본 키이므로 한 슬롯을 이중 예약할 수 없습니다.
-- **보상 트랜잭션:** Hotel 성공 후 Band가 실패하면 새 Hotel 예약을 해제합니다.
-- **스레드 안전성:** Talk의 공유 클라이언트 레지스트리와 소켓 쓰기를 잠금으로 보호합니다.
-- **정상 프로토콜 종료:** Talk 클라이언트는 서버의 `Client exiting` 응답을 받은 뒤 종료합니다.
-
-## 자동 검증
-
-테스트 전에 서버를 별도로 실행할 필요가 없습니다. 테스트가 임시 포트와 데이터베이스를 자동 할당합니다.
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-통합 테스트 범위는 다음과 같습니다.
-
-- Hotel/Band 가용 슬롯, 예약, 해제, 서비스 격리
-- 잘못된 인증 및 사용자별 예약 한도
-- 두 사용자가 같은 슬롯을 요청할 때의 충돌
-- 가장 빠른 Hotel/Band 공통 슬롯 자동 예약
-- Talk 등록, 전체/개인 메시지, 사용자 목록, 종료
-- 잘못된 명령과 미등록 사용자 처리
-
-개발 중 사용한 정적 검사는 다음과 같습니다.
-
-```powershell
-python -m pip install -r requirements-dev.txt
-ruff check Hotel Talk tests
-ruff format --check Hotel Talk tests
-```
-
-`ruff`는 개발 도구이며 애플리케이션 실행에는 필요하지 않습니다. GitHub Actions가 push 및 pull request마다 Windows와 Ubuntu, Python 3.10과 3.12 조합에서 정적 검사와 통합 테스트를 반복합니다.
-
-## 트레이드오프와 향후 개선
-
-- 데모 인증은 프로토콜 검증용이며 인터넷 공개 서비스에는 적합하지 않습니다.
-- SQLite는 로컬 실행 환경에는 적합하지만 다중 노드 배포에는 공유 DB 또는 합의를 고려한 저장소가 필요합니다.
-- 서비스 간 예약은 보상 방식을 사용하므로 롤백 요청도 실패하는 상황에서는 엄격한 원자성을 보장하지 못합니다.
-- 채팅 기록은 메모리에만 존재합니다. 영속 기록에는 DB 및 전달 확인 모델이 필요합니다.
-- 공개 배포 전 TLS, 요청 제한, 구조화 로그, 관측성을 추가해야 합니다.
-
-## 문제 해결
-
-### 포트를 이미 사용 중인 경우
-
-기존 서버를 `Ctrl+C`로 종료하거나 서버와 클라이언트 양쪽에 다른 포트를 지정합니다.
-
-### Wedding Planner가 연결되지 않는 경우
-
-`Hotel/local_api.py`를 먼저 실행하고 서버가 출력한 포트와 `Hotel/api.ini`의 두 URL이 일치하는지 확인합니다.
-
-### 예약 데이터 초기화
-
-API를 종료하고 `--reset-data`로 다시 시작합니다. 설정된 SQLite 예약 데이터베이스를 새로 생성합니다.
+런타임 DB에는 예약 소유자와 처리 기록이 들어 있습니다. DB와 복구 저널, 잠금 파일, 대화 기록, 인증정보, 캐시와 개인 유지보수 메모는 공개 압축 파일에 포함하지 않습니다. 저널에는 평문 인증정보나 전체 예외 문구 대신 해시로 구분한 사용자 범위, 작업 상태와 예외 종류를 기록합니다. 이 프로젝트는 실패를 다루는 로컬 네트워크 시스템이며, 인터넷 공개용 채팅이나 예약 서비스를 완성했다는 의미는 아닙니다.
