@@ -177,7 +177,10 @@ def _receipt_outcome(
     client: ReservationApi, operation_id: str, method: str, slot_id: int
 ) -> _Outcome | None:
     try:
-        receipt = client.get_operation(operation_id)
+        # A lost mutation response followed by one transient receipt failure
+        # can still be resolved without submitting another mutation. Receipt GET
+        # attempts share the client's existing monotonic request budget.
+        receipt = client.get_operation(operation_id, retries=max(2, client.retries))
     except Exception:  # noqa: BLE001 - a failed lookup leaves the outcome uncertain
         return None
     if not isinstance(receipt, dict) or not receipt:

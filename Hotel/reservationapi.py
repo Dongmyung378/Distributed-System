@@ -128,7 +128,15 @@ class ReservationApi:
         operation_id: str | None = None,
         expected_operation_id: str | None = None,
         allow_missing: bool = False,
+        retries: int | None = None,
     ) -> Any:
+        attempt_limit = self.retries if retries is None else retries
+        if (
+            isinstance(attempt_limit, bool)
+            or not isinstance(attempt_limit, int)
+            or not 1 <= attempt_limit <= 10
+        ):
+            raise ValueError("retries must be an integer between 1 and 10")
         url = urljoin(self.base_url, endpoint.lstrip("/"))
         last_error: Exception | None = None
         headers = self._headers()
@@ -144,7 +152,7 @@ class ReservationApi:
         deadline = time.monotonic() + self.max_elapsed
         attempts = 0
 
-        for attempt in range(1, self.retries + 1):
+        for attempt in range(1, attempt_limit + 1):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
@@ -192,13 +200,13 @@ class ReservationApi:
                 if response is not None:
                     response.close()
 
-            if attempt < self.retries:
+            if attempt < attempt_limit:
                 wait = self.delay * attempt
                 if time.monotonic() + wait >= deadline:
                     break
                 print(
                     f"[{self.service_name}] request failed "
-                    f"({attempt}/{self.retries}); retrying in {wait:.1f}s"
+                    f"({attempt}/{attempt_limit}); retrying in {wait:.1f}s"
                 )
                 time.sleep(wait)
 
@@ -215,10 +223,16 @@ class ReservationApi:
     def get_slots_held(self) -> list[dict[str, str]]:
         return self._send_request("GET", "reservation")
 
-    def get_operation(self, operation_id: str) -> dict | None:
+    def get_operation(
+        self, operation_id: str, *, retries: int | None = None
+    ) -> dict | None:
+        """Read a receipt, optionally overriding attempts within one time budget."""
         operation_id = self._validate_operation_id(operation_id)
         return self._send_request(
-            "GET", f"operation/{quote(operation_id, safe='')}", allow_missing=True
+            "GET",
+            f"operation/{quote(operation_id, safe='')}",
+            allow_missing=True,
+            retries=retries,
         )
 
     def release_slot(

@@ -328,6 +328,53 @@ class BookingRecoveryTests(unittest.TestCase):
         self.assertEqual(self.held("hotel"), [1])
         self.assertEqual(self.held("band"), [1])
 
+    def test_candidate_race_recovers_lost_commit_and_first_receipt_response(
+        self,
+    ) -> None:
+        """A transient receipt outage must not require another mutation."""
+        original = self.clients["band"].session.request
+        writes = []
+        receipt_reads = []
+        lost_operation = None
+
+        with ReservationApi(
+            self.clients["band"].base_url, "band-demo-user-2", retries=1, delay=0
+        ) as competitor:
+
+            def racing_request(method, url, **kwargs):
+                nonlocal lost_operation
+                if method == "POST":
+                    writes.append(url.rsplit("/", 1)[-1])
+                    if url.endswith("/1"):
+                        competitor.reserve_slot(1)
+                response = original(method, url, **kwargs)
+                if method == "POST" and url.endswith("/2"):
+                    lost_operation = kwargs["headers"]["Idempotency-Key"]
+                    response.close()
+                    raise requests.ReadTimeout("committed band response lost")
+                if lost_operation and url.endswith("/operation/" + lost_operation):
+                    receipt_reads.append(lost_operation)
+                    if len(receipt_reads) == 1:
+                        response.close()
+                        raise requests.ConnectionError("first receipt response lost")
+                return response
+
+            self.clients["hotel"].reserve_slot(5)
+            with patch.object(
+                self.clients["band"].session, "request", side_effect=racing_request
+            ):
+                reserve_best_match(self.clients, journal=self.journal)
+
+            self.assertEqual(self.held("hotel"), [2, 5])
+            self.assertEqual(self.held("band"), [2])
+            self.assertEqual(competitor.get_slots_held(), [{"id": "1"}])
+            self.assertEqual(
+                [item.state for item in self.journal.all()], ["aborted", "matched"]
+            )
+            self.assertEqual(writes, ["1", "2"])
+            # Two confirmation reads, then the existing current-pair check.
+            self.assertEqual(receipt_reads, [lost_operation] * 3)
+
     def test_lost_hotel_response_is_confirmed_then_compensated_on_restart(self) -> None:
         original = self.clients["hotel"].session.request
 

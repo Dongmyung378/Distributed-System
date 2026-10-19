@@ -12,11 +12,13 @@ Its portfolio contribution is practical evidence of protocol handling, concurren
 
 ## 2. Results
 
-**85 tests passed in each of four environments**, covering real TCP/HTTP, concurrent reservations, lost responses, guarded compensation, process termination and restart. All 340 executions passed with no failures, errors or skips; the initial five tests remain.
+**89 tests passed on Windows Python 3.10.21 and 3.12.7** after the close-path and receipt-confirmation repair. All 178 executions passed with no failures, errors or skips, both runs record the same current source hashes, and the initial five tests remain. The [CI repair verification](reports/ci-repair-verification.json) links the complete local records. For automated cross-platform runs, see [GitHub Actions](https://github.com/Dongmyung378/Distributed-System/actions/workflows/ci.yml).
+
+The retained earlier source snapshot passed **85 tests in each of four environments**, totaling 340 executions without failures, errors or skips. Those verification reports and the following benchmarks remain historical records rather than measurements of the repaired source.
 
 With one stalled connection and three healthy receivers, each version completed three identical trials: **3 of 900 planned delivery observations initially, versus 900 of 900 after strengthening in every trial**. The initial writer attempted only 48 of 300 broadcasts and submitted 47, so incomplete observations are not a message-loss rate. Under 60 healthy connections the median trial-level p95 rose from **1.6338ms to 3.2020ms**. Resource measurements include the server and client harness together.
 
-Completed environments: **Windows Python 3.10.22 / 3.12.7 and WSL Ubuntu Python 3.10.22 / 3.12.3**, with separate virtual environments installed from the dependency lock. Linux used a separate source copy; normalized source hashes match across all four runs. WSL shares the same physical host. These are completed local runs, not a claim of GitHub Actions success.
+The earlier four-environment record used **Windows Python 3.10.22 / 3.12.7 and WSL Ubuntu Python 3.10.22 / 3.12.3**, with separate virtual environments installed from the dependency lock. Linux used a separate source copy; normalized source hashes match within those four runs. WSL shares the same physical host. The local repair records cover two Windows environments, while performance benchmarks retain their original source snapshot.
 
 | Evidence | What it establishes |
 | --- | --- |
@@ -37,7 +39,11 @@ The booking problem is different: a client can lose a response after a reservati
 
 Talk retains one receiving thread per connection. It adds a bounded FIFO queue and a sending thread per connection, with explicit connection, input, registration, and send limits. The trade-off is a higher but bounded thread count in exchange for slow-peer isolation. Registration confirmation is queued before the username becomes visible.
 
+Normal rejection and quit now send the final response before half-closing the socket and discarding unread input within the existing close budget. Continuous input cannot hold the connection open indefinitely, and failed-peer cleanup precedes updating `send_failures`.
+
 Hotel commits each reservation mutation and its operation receipt together in SQLite. A stable operation key makes a retry refer to the same action. A reservation generation guard limits compensation to the booking created by that workflow. The CLI records intent before a request and stores unresolved outcomes for later recovery.
+
+Receipt confirmation uses read-only GET attempts with a limit of `max(2, client.retries)` inside one lookup's existing `max_elapsed` budget. It adds no mutation POST, preserves mutation retry limits, and still requires proof of the current Hotel/Band pair before reporting a match.
 
 The interactive planner uses a persistent journal and a same-journal process lock. Direct function calls use an in-memory journal unless the caller explicitly passes a file-backed one. Automatic matching preserves unrelated manual reservations; cleanup remains the explicit menu 7 action.
 
@@ -80,6 +86,7 @@ For Hotel, start `Hotel/local_api.py` and `Hotel/booking.py`. On a fresh demo da
 - [Reservation API server](../Hotel/local_api.py) and [HTTP client](../Hotel/reservationapi.py)
 - [Planner](../Hotel/booking.py) and [recovery journal](../Hotel/recovery.py)
 - [Tests](../tests), [verification runner](../scripts/verify.py), and [benchmark harness](../scripts/benchmark.py)
-- [Verification summary](reports/verification-summary.json), [initial measurement](reports/initial-benchmark.json), [improved measurement](reports/final-benchmark.json), and [comparison](reports/comparison.json)
+- [CI repair verification](reports/ci-repair-verification.json), with complete Windows Python 3.10.21 and 3.12.7 run records
+- [Earlier verification summary](reports/verification-summary.json), [initial measurement](reports/initial-benchmark.json), [improved measurement](reports/final-benchmark.json), and [comparison](reports/comparison.json)
 
-The source history preserves the initial implementation. Public evidence contains technical measurements and source hashes, without local runtime databases, bearer credentials, private workflow records, chat contents, or daily maintenance notes. GitHub source publication, external repository visibility, and an actual Actions run are separate checks; the configured matrix alone is not described as a successful run.
+The source history preserves the initial implementation. Public evidence contains technical measurements and source hashes, without local runtime databases, bearer credentials, private workflow records, chat contents, or daily maintenance notes.

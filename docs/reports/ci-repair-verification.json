@@ -1,0 +1,292 @@
+{
+  "schema": "network-systems-ci-repair-verification/v1",
+  "recorded_on": "2026-10-19",
+  "scope": "Completed local verification on one Windows host; no new Linux run or benchmark measurement.",
+  "github_actions": {
+    "workflow": "https://github.com/Dongmyung378/Distributed-System/actions/workflows/ci.yml",
+    "status": "This local record does not establish GitHub Actions success for the repair.",
+    "original_failed_run": "https://github.com/Dongmyung378/Distributed-System/actions/runs/39194714391",
+    "original_failed_python": "3.10.11",
+    "local_python_patch_version_differs": true
+  },
+  "local_verification": {
+    "tests_per_environment": 89,
+    "completed_environments": 2,
+    "total_executions": 178,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "source_hashes_match_between_runs": true,
+    "source_files_checked": 20,
+    "source_hash_policy": "SHA-256 of UTF-8 source with CRLF normalized to LF, ignoring checkout line endings.",
+    "records": [
+      {
+        "environment": {
+          "python": "3.10.21",
+          "os": "Windows",
+          "machine": "AMD64",
+          "packages": {
+            "requests": "2.34.2",
+            "urllib3": "2.8.0",
+            "charset-normalizer": "3.5.2",
+            "idna": "3.20",
+            "certifi": "2026.7.22",
+            "ruff": "0.17.0"
+          }
+        },
+        "tests": 89,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "seconds": 35.342569,
+        "successful": true,
+        "source_changed_during_tests": false,
+        "record": "ci-repair-windows-python310.json",
+        "sha256": "8d3baa44dd2d0d4e90b0a1d7ec04a43f1f2672d707cf87f42a93bafa9d1e8c63",
+        "source_hashes": "ci-repair-windows-python310.json#/source_sha256"
+      },
+      {
+        "environment": {
+          "python": "3.12.7",
+          "os": "Windows",
+          "machine": "AMD64",
+          "packages": {
+            "requests": "2.34.2",
+            "urllib3": "2.8.0",
+            "charset-normalizer": "3.5.2",
+            "idna": "3.20",
+            "certifi": "2026.7.22",
+            "ruff": "0.17.0"
+          }
+        },
+        "tests": 89,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "seconds": 33.247812,
+        "successful": true,
+        "source_changed_during_tests": false,
+        "record": "ci-repair-windows-python312.json",
+        "sha256": "27e038ab0076e34698bb02d2889eac1d34d1eb0cf29e3d57476203f393fefa1e",
+        "source_hashes": "ci-repair-windows-python312.json#/source_sha256"
+      }
+    ],
+    "added_tests": [
+      "test_booking_recovery.BookingRecoveryTests.test_candidate_race_recovers_lost_commit_and_first_receipt_response",
+      "test_reservation_reliability.ReservationClientValidationTests.test_invalid_receipt_retry_override_never_reaches_network",
+      "test_reservation_reliability.ReservationClientValidationTests.test_receipt_confirmation_retries_share_one_deadline",
+      "test_talk_resilience.BoundedTalkTests.test_rejected_flood_cannot_extend_close_or_keep_connection_capacity"
+    ],
+    "strengthened_existing_test": "test_talk_resilience.BoundedTalkTests.test_oversized_terminated_and_unterminated_frames_are_closed"
+  },
+  "repair_contract": {
+    "chat": {
+      "final_response_order": "Drain writer, SHUT_WR, discard unread input, close.",
+      "input_discard_max_seconds": 0.1,
+      "input_discard_read_bytes": 4096,
+      "within_existing_writer_drain_budget": "send_timeout + 0.1 seconds",
+      "existing_final_writer_cleanup_max_seconds": 0.2,
+      "continuous_input_extends_deadline": false,
+      "discarded_input_executed": false,
+      "send_failures_counted_after_failed_peer_cleanup": true,
+      "flood_regression_close_upper_bound_seconds": 1,
+      "flood_regression_send_timeout_seconds": 0.15,
+      "flood_regression_reclaims_single_connection_capacity": true
+    },
+    "booking": {
+      "receipt_confirmation_attempt_limit": "max(2, client.retries)",
+      "receipt_confirmation_method": "GET",
+      "one_lookup_shares_existing_max_elapsed_budget": true,
+      "attempts_can_stop_earlier_when_budget_is_exhausted": true,
+      "additional_mutation_posts_for_receipt_confirmation": 0,
+      "mutation_retry_limits_changed": false,
+      "current_hotel_and_band_generation_proof_required": true,
+      "max_elapsed_is_strict_whole_workflow_wall_clock_bound": false
+    }
+  },
+  "chat_delayed_reader_probe": {
+    "method": [
+      "Start a fresh loopback connection with max_line_bytes=64 for each round.",
+      "Send 65 x bytes followed by the recorded number of newline bytes.",
+      "Wait the recorded read delay, then read until EOF or socket error.",
+      "Immediately before ChatHandler.close, inspect unread socket bytes with MSG_PEEK.",
+      "Stop the server and record remaining connections and handler threads."
+    ],
+    "before_source_revision": "8147d903746e33e4bb2368d4b19f410a202b9c98",
+    "before_server_sha256": "6b4dfb19b9e1c809e702df21e93dc8315cd49604193781118e59b4e1af5c8ccb",
+    "after_server_source_hash": "ci-repair-windows-python310.json#/source_sha256/Talk~1myserver.py",
+    "cases": [
+      {
+        "phase": "before",
+        "python": "3.10.21",
+        "os": "Windows",
+        "rounds": 100,
+        "trailing_newline_bytes": 1,
+        "read_delay_seconds": 0.005,
+        "outcomes": {
+          "ConnectionResetError:b''": 100
+        },
+        "closes_with_unread_input": 100,
+        "maximum_unread_bytes_at_close": 1,
+        "diagnostics": {
+          "connections_accepted": 100,
+          "connections_rejected": 0,
+          "connections_closed": 100,
+          "messages_enqueued": 100,
+          "messages_sent": 100,
+          "bytes_sent": 1700,
+          "frames_received": 0,
+          "send_failures": 0,
+          "queue_overflows": 0,
+          "registration_timeouts": 0,
+          "oversized_frames": 100,
+          "invalid_utf8_frames": 0,
+          "active_connections": 0,
+          "registered_users": 0,
+          "handler_threads": 0,
+          "pending_requests": 0
+        }
+      },
+      {
+        "phase": "before",
+        "python": "3.12.7",
+        "os": "Windows",
+        "rounds": 300,
+        "trailing_newline_bytes": 1,
+        "read_delay_seconds": 0.005,
+        "outcomes": {
+          "ConnectionResetError:b''": 300
+        },
+        "closes_with_unread_input": 300,
+        "maximum_unread_bytes_at_close": 1,
+        "diagnostics": {
+          "connections_accepted": 300,
+          "connections_rejected": 0,
+          "connections_closed": 300,
+          "messages_enqueued": 300,
+          "messages_sent": 300,
+          "bytes_sent": 5100,
+          "frames_received": 0,
+          "send_failures": 0,
+          "queue_overflows": 0,
+          "registration_timeouts": 0,
+          "oversized_frames": 300,
+          "invalid_utf8_frames": 0,
+          "active_connections": 0,
+          "registered_users": 0,
+          "handler_threads": 0,
+          "pending_requests": 0
+        }
+      },
+      {
+        "phase": "before",
+        "python": "3.12.7",
+        "os": "Windows",
+        "rounds": 100,
+        "trailing_newline_bytes": 8192,
+        "read_delay_seconds": 0.02,
+        "outcomes": {
+          "ConnectionResetError:b''": 100
+        },
+        "closes_with_unread_input": 100,
+        "maximum_unread_bytes_at_close": 8192,
+        "diagnostics": {
+          "connections_accepted": 100,
+          "connections_rejected": 0,
+          "connections_closed": 100,
+          "messages_enqueued": 100,
+          "messages_sent": 100,
+          "bytes_sent": 1700,
+          "frames_received": 0,
+          "send_failures": 0,
+          "queue_overflows": 0,
+          "registration_timeouts": 0,
+          "oversized_frames": 100,
+          "invalid_utf8_frames": 0,
+          "active_connections": 0,
+          "registered_users": 0,
+          "handler_threads": 0,
+          "pending_requests": 0
+        }
+      },
+      {
+        "phase": "after",
+        "python": "3.10.21",
+        "os": "Windows",
+        "rounds": 300,
+        "trailing_newline_bytes": 1,
+        "read_delay_seconds": 0.005,
+        "outcomes": {
+          "eof:b'message too long\\n'": 300
+        },
+        "closes_with_unread_input": 0,
+        "maximum_unread_bytes_at_close": 0,
+        "diagnostics": {
+          "connections_accepted": 300,
+          "connections_rejected": 0,
+          "connections_closed": 300,
+          "messages_enqueued": 300,
+          "messages_sent": 300,
+          "bytes_sent": 5100,
+          "frames_received": 0,
+          "send_failures": 0,
+          "queue_overflows": 0,
+          "registration_timeouts": 0,
+          "oversized_frames": 300,
+          "invalid_utf8_frames": 0,
+          "active_connections": 0,
+          "registered_users": 0,
+          "handler_threads": 0,
+          "pending_requests": 0
+        }
+      },
+      {
+        "phase": "after",
+        "python": "3.12.7",
+        "os": "Windows",
+        "rounds": 100,
+        "trailing_newline_bytes": 8192,
+        "read_delay_seconds": 0.02,
+        "outcomes": {
+          "eof:b'message too long\\n'": 100
+        },
+        "closes_with_unread_input": 0,
+        "maximum_unread_bytes_at_close": 0,
+        "diagnostics": {
+          "connections_accepted": 100,
+          "connections_rejected": 0,
+          "connections_closed": 100,
+          "messages_enqueued": 100,
+          "messages_sent": 100,
+          "bytes_sent": 1700,
+          "frames_received": 0,
+          "send_failures": 0,
+          "queue_overflows": 0,
+          "registration_timeouts": 0,
+          "oversized_frames": 100,
+          "invalid_utf8_frames": 0,
+          "active_connections": 0,
+          "registered_users": 0,
+          "handler_threads": 0,
+          "pending_requests": 0
+        }
+      }
+    ],
+    "after_total_rounds": 400,
+    "interpretation": "Delayed readers retained the exact rejection and EOF after the repair. This does not provide message acknowledgements or durable delivery."
+  },
+  "retained_historical_evidence": {
+    "verification_summary": "verification-summary.json",
+    "tests_per_environment": 85,
+    "completed_environments": 4,
+    "total_executions": 340,
+    "source_snapshot": "The source hashes in the retained four-environment records, not the repaired snapshot.",
+    "benchmark_records": [
+      "initial-benchmark.json",
+      "final-benchmark.json",
+      "comparison.json"
+    ],
+    "records_overwritten": false,
+    "benchmark_rerun_for_repair": false
+  }
+}

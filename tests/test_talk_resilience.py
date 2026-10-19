@@ -214,13 +214,63 @@ class BoundedTalkTests(unittest.TestCase):
 
     def test_oversized_terminated_and_unterminated_frames_are_closed(self) -> None:
         server = self.start_server(max_line_bytes=64)
-        for suffix in (b"", b"\n"):
+        suffixes = (b"", b"\n", b"\nregister Ignored\n")
+        for number, suffix in enumerate(suffixes, start=1):
             with self.subTest(suffix=suffix):
                 peer = self.peer(server)
                 peer.socket.sendall(b"x" * 65 + suffix)
+                # A delayed reader must retain the response after the server
+                # closes, even when unread trailing input would cause a reset.
+                self.eventually(
+                    lambda expected=number: (
+                        server.snapshot()["oversized_frames"] == expected
+                    )
+                )
+                self.eventually(lambda: server.snapshot()["handler_threads"] == 0)
                 self.assertEqual(peer.receive(), "message too long")
                 self.assertEqual(peer.receive(), "")
-        self.assertEqual(server.snapshot()["oversized_frames"], 2)
+        self.assertEqual(server.snapshot()["oversized_frames"], len(suffixes))
+        self.assertEqual(server.snapshot()["frames_received"], 0)
+        self.assertEqual(server.state.usernames(), [])
+
+    def test_rejected_flood_cannot_extend_close_or_keep_connection_capacity(
+        self,
+    ) -> None:
+        server = self.start_server(max_clients=1, max_line_bytes=64, send_timeout=0.15)
+        peer = self.peer(server)
+        peer.socket.settimeout(0.5)
+        started_flooding = threading.Event()
+        stop_flooding = threading.Event()
+
+        def flood():
+            try:
+                while not stop_flooding.is_set():
+                    peer.socket.sendall(b"x" * 4096)
+                    started_flooding.set()
+            except OSError:
+                return
+
+        sender = threading.Thread(target=flood)
+        started = time.monotonic()
+        sender.start()
+        try:
+            self.assertTrue(started_flooding.wait(timeout=1))
+            self.eventually(lambda: server.snapshot()["connections_closed"] == 1)
+            self.eventually(lambda: server.snapshot()["handler_threads"] == 0)
+            self.assertLess(time.monotonic() - started, 1)
+        finally:
+            stop_flooding.set()
+            try:
+                peer.socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            sender.join(timeout=1)
+        self.assertFalse(sender.is_alive())
+        self.assertEqual(server.snapshot()["oversized_frames"], 1)
+        self.assertEqual(server.snapshot()["frames_received"], 0)
+        replacement = self.peer(server, "Replacement")
+        replacement.send("user_list")
+        self.assertEqual(replacement.receive(), "Online users: Replacement")
 
     def test_exact_byte_limit_is_accepted(self) -> None:
         server = self.start_server(max_line_bytes=64)

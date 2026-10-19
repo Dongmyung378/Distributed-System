@@ -155,9 +155,10 @@ class ChatHandler(socketserver.BaseRequestHandler):
                 finally:
                     self.outgoing.task_done()
         except (OSError, ValueError):
-            if not self._socket_closed:
-                self.server.count("send_failures")
+            failed = not self._socket_closed
             self.close()
+            if failed:
+                self.server.count("send_failures")
 
     def close(self) -> None:
         """Abort this peer and release its name without waiting for its reader."""
@@ -174,14 +175,38 @@ class ChatHandler(socketserver.BaseRequestHandler):
         self.server.state.disconnect(self)
 
     def finish(self) -> None:
+        deadline = time.monotonic() + self.server.send_timeout + 0.1
         with self._enqueue_lock:
             self.closing.set()
             self._writer_stop.set()
         # Normal quit/rejection drains queued responses for one bounded window.
-        self.writer.join(timeout=self.server.send_timeout + 0.1)
+        self.writer.join(timeout=max(0, deadline - time.monotonic()))
+        if not self.writer.is_alive() and not self._socket_closed:
+            self._drain_input(min(deadline, time.monotonic() + 0.1))
         self.close()
         self.writer.join(timeout=0.2)
         self.server.count("connections_closed")
+
+    def _drain_input(self, deadline: float) -> None:
+        # Closing with unread request bytes can reset TCP and discard the final
+        # response on Windows. Send FIN after the writer, then discard input
+        # without interpreting it or extending the existing close deadline.
+        try:
+            self.request.shutdown(socket.SHUT_WR)
+            while not self._socket_closed and not self.server.stopping.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return
+                readable, _, _ = select.select([self.request], [], [], remaining)
+                if not readable:
+                    return
+                try:
+                    if not self.request.recv(4096):
+                        return
+                except BlockingIOError:
+                    continue
+        except (OSError, ValueError):
+            return
 
     def handle(self) -> None:
         buffered = bytearray()

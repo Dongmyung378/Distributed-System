@@ -8,13 +8,15 @@ Original development: **September to December 2024**. Reliability improvements a
 
 ## Results and evidence
 
-**85 tests passed in each of four environments**, covering real TCP/HTTP, concurrent reservations, lost responses, guarded compensation, process termination and restart. All 340 executions passed with no failures, errors or skips; the initial five tests remain.
+**89 tests passed on Windows Python 3.10.21 and 3.12.7** after repairing rejection-response shutdown and transient receipt confirmation. All 178 executions passed with no failures, errors or skips, and both runs record the same current source hashes. The initial five tests remain. See the [CI repair verification](docs/reports/ci-repair-verification.json) and its two complete local run records.
+
+The retained four-environment verification records **85 tests per environment and 340 passing executions** for an earlier source snapshot. Those reports and the following benchmark results remain historical evidence; they were not overwritten or rerun for the repair.
 
 With one stalled connection and three healthy receivers, each version completed three identical trials: **3 of 900 planned delivery observations initially, versus 900 of 900 after strengthening in every trial**. The initial writer attempted only 48 of 300 broadcasts and submitted 47, so incomplete observations are not a message-loss rate. Under 60 healthy connections the median trial-level p95 rose from **1.6338ms to 3.2020ms**. Resource measurements include the server and client harness together.
 
-Completed environments: **Windows Python 3.10.22 / 3.12.7 and WSL Ubuntu Python 3.10.22 / 3.12.3**, with separate virtual environments installed from the dependency lock. Linux used a separate source copy; normalized source hashes match across all four runs. WSL shares the same physical host. These are completed local runs, not a claim of GitHub Actions success.
+The earlier four-environment record used **Windows Python 3.10.22 / 3.12.7 and WSL Ubuntu Python 3.10.22 / 3.12.3**, with separate virtual environments installed from the dependency lock. Linux used a separate source copy; normalized source hashes match within those four runs. WSL shares the same physical host. The latest local records cover the two Windows versions listed above, while performance benchmarks retain their original source snapshot.
 
-The measurements use local loopback connections and controlled faults. They do not estimate internet latency or production capacity. See [verification summary](docs/reports/verification-summary.json), [initial benchmark](docs/reports/initial-benchmark.json), [final benchmark](docs/reports/final-benchmark.json), and [comparison](docs/reports/comparison.json). CI configuration and completed local validation are separate evidence; no successful GitHub Actions run is implied.
+The measurements use local loopback connections and controlled faults. They do not estimate internet latency or production capacity. See the [earlier verification summary](docs/reports/verification-summary.json), [initial benchmark](docs/reports/initial-benchmark.json), [final benchmark](docs/reports/final-benchmark.json), and [comparison](docs/reports/comparison.json). For automated cross-platform runs, see [GitHub Actions](https://github.com/Dongmyung378/Distributed-System/actions/workflows/ci.yml).
 
 ![Recorded chat measurements](docs/figures/performance.svg)
 
@@ -80,6 +82,8 @@ A raw client registers with `register <name>`. Frames are UTF-8 text terminated 
 
 The receiving thread model remains. Each connection also has a sending thread so a stalled reader does not hold up other recipients. Queue overflow or a send deadline closes that peer. `messages_enqueued` and `messages_sent` are diagnostic counters, not acknowledgements of a recipient reading a message. Talk does not persist message history or promise acknowledged or durable delivery.
 
+A normal quit or protocol rejection drains its response, closes the sending direction, then discards unread input for at most 0.1 seconds within the existing close budget. This prevents unread trailing bytes from resetting the connection and discarding the rejection on Windows. Further input is not executed, continuous input cannot extend the deadline, and `send_failures` is updated after failed-peer cleanup.
+
 For custom settings:
 
 ```bash
@@ -124,6 +128,8 @@ Every request requires the relevant demo bearer identity. Existing endpoints rem
 | GET | `/{service}/api/operation/{operation_id}` | Look up an identity-scoped mutation receipt and its current reservation generation |
 
 The Python client supplies one `Idempotency-Key` per logical mutation and reuses it for retries. The server commits the reservation change and its receipt in one SQLite transaction. Replaying the same request returns its recorded outcome. Reusing the key for a different method, slot, or expected generation returns a conflict.
+
+When confirming a mutation outcome, receipt GETs use an attempt limit of `max(2, client.retries)` while sharing one lookup's existing `max_elapsed` budget. A transient first receipt failure can therefore be retried without adding a mutation POST. This does not change mutation retry settings or remove the requirement to prove the current reservation pair.
 
 Recovery compensation supplies `Expected-Reservation-Operation-Id` when cancelling a reservation. If a slot has been cancelled and rebooked, this guard prevents deleting the replacement. A successful historical receipt does not prove that its reservation still exists; the planner separately checks both current generations before reporting a recovered pair as matched.
 

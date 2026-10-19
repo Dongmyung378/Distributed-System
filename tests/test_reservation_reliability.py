@@ -510,6 +510,38 @@ class ReservationClientValidationTests(unittest.TestCase):
                     client.reserve_slot(1, operation_id=key)
             request.assert_not_called()
 
+    def test_receipt_confirmation_retries_share_one_deadline(self):
+        with ReservationApi(
+            "http://127.0.0.1/band/api",
+            "owner",
+            retries=1,
+            delay=0,
+            timeout=1,
+            max_elapsed=0.05,
+        ) as client:
+            with (
+                patch("reservationapi.time.monotonic", side_effect=[0, 0, 0.06, 0.06]),
+                patch.object(
+                    client.session, "request", side_effect=requests.Timeout("fault")
+                ) as request,
+                self.assertRaises(requests.HTTPError),
+            ):
+                client.get_operation("receipt-budget", retries=2)
+            self.assertEqual(request.call_count, 1)
+            self.assertEqual(request.call_args.args[0], "GET")
+            self.assertEqual(request.call_args.kwargs["timeout"], 0.05)
+            self.assertEqual(client.retries, 1)
+
+    def test_invalid_receipt_retry_override_never_reaches_network(self):
+        with (
+            ReservationApi("http://127.0.0.1/band/api", "owner") as client,
+            patch.object(client.session, "request") as request,
+        ):
+            for retries in (0, 11, True, 1.5):
+                with self.subTest(retries=retries), self.assertRaises(ValueError):
+                    client.get_operation("valid-receipt", retries=retries)
+            request.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
