@@ -6,7 +6,15 @@ Two Python applications explore different network failures: **Talk** provides co
 
 Original development: **September to December 2024**. Reliability improvements and reproducibility work: **October 2026**, recorded separately from the original development period. The initial source remains in Git history, including commit `1504ab3`.
 
+## What a user can do
+
+In **Talk**, a user types a message in a terminal and another connected user receives it. **TCP** carries an ordered stream of bytes, so the application uses a newline to mark where each command ends. The main reliability question is whether a user who stops reading can delay everyone else.
+
+In **Hotel Wedding Planner**, a user asks for the earliest bookable time slot available for both a hotel and a band. The planner sends **HTTP** requests to the local API and displays the reservation outcome; **SQLite** stores bookings and the information needed to recover an interrupted attempt. Hotel and Band are separate logical resources served by one local process. A timeout can mean that only the response was lost, so the planner must establish what actually happened before trying again or cancelling its own booking.
+
 ## Results and evidence
+
+Read the test counts as checks of specified behaviors, and the delivery counts as observations of messages arriving at healthy clients. One broadcast sent to several receivers creates several expected delivery observations. **Loopback** means the clients and server communicate on the same computer. **p95 latency** describes the slower end of the measured delays: about 95% are at or below that value. The reported median trial-level p95 takes the middle of the repeated trials' p95 values; it is not the average delay or a worst-case guarantee.
 
 **89 tests passed on Windows Python 3.10.21 and 3.12.7** after repairing rejection-response shutdown and transient receipt confirmation. All 178 executions passed with no failures, errors or skips, and both runs record the same current source hashes. The initial five tests remain. See the [CI repair verification](docs/reports/ci-repair-verification.json) and its two complete local run records.
 
@@ -23,6 +31,10 @@ The measurements use local loopback connections and controlled faults. They do n
 ![Two independent application flows](docs/figures/architecture.svg)
 
 ## What was strengthened
+
+A **bounded queue** is a waiting list with a maximum size. Each Talk recipient has its own list, so a recipient that stops reading does not keep everyone else waiting; when that list fills, the affected connection is closed. This is the project's response to **backpressure**, where messages arrive faster than a receiver can consume them.
+
+For reservations, **idempotency** means a repeated request with the same operation key reuses its recorded outcome instead of applying the change twice. A **receipt** records the server's outcome, while a **journal** records the planner's intended steps for restart recovery. **Compensation** cancels a booking made by an incomplete workflow. Its **generation guard** identifies the particular booking creation, protecting a later replacement reservation in the same slot.
 
 | Area | Initial behavior retained | Reliability improvement |
 | --- | --- | --- |

@@ -6,6 +6,8 @@
 
 The repository contains two independent applications: a newline-delimited TCP chat and an HTTP hotel/band booking planner. The September to December 2024 development period remains unchanged. October 2026 maintenance strengthens failure handling without replacing the initial commands, reservation URLs, response bodies, manual actions, or automatic earliest-slot matching.
 
+**TCP** transports a byte stream rather than separate application messages, so Talk defines its own message boundary with a newline. **HTTP** gives the planner a request/response interface to reservation operations. In both paths, receiving no response is different from proving that the other side did nothing. That distinction motivates the explicit delivery limits in Talk and the stored operation outcomes in Hotel.
+
 ## Talk: bounded threaded messaging
 
 ```mermaid
@@ -69,6 +71,8 @@ The planner's `_receipt_outcome` confirms an uncertain mutation with read-only r
 Before an automatic mutation, the planner commits its intent and operation identifiers to a SQLite `RecoveryJournal`. The interactive CLI opens a file-backed journal and holds a cross-process lock while using it. The lock is released when the process exits; it is not a long-running SQLite write transaction around HTTP calls.
 
 The default direct library call `reserve_best_match(clients)` creates an in-memory journal. It is isolated for that call and cannot recover after process exit. Callers needing restart recovery must explicitly pass `RecoveryJournal(path)` and use the same file for later recovery. The CLI defaults to `Hotel/data/booking-journal.db`; `BOOKING_JOURNAL_PATH` overrides it.
+
+A **journal** records the planner's intended action before it sends a request; a **receipt** records what the server committed. A retry uses the same **idempotency key** so the same logical action is not applied twice. If only part of a booking pair succeeds, **compensation** attempts to undo this workflow's reservation. A **generation** identifies the particular creation of a booking in a slot, allowing that cancellation to avoid a later replacement. The states below track which proof or cleanup is still needed.
 
 | State | Recovery decision |
 | --- | --- |

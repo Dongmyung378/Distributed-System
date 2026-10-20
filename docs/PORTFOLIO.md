@@ -10,11 +10,15 @@ This project implements two networked applications in Python. Talk handles concu
 
 Its portfolio contribution is practical evidence of protocol handling, concurrency, transactional state, and failure recovery. These are useful foundations for operating services that include AI components, while the project itself remains a networking and consistency project.
 
+In everyday terms, Talk takes a typed message and delivers it to connected users; the planner takes a request for a hotel/band match and returns the booking outcome. A **bounded queue** stores only a limited number of waiting messages for each recipient. **Idempotency** lets a repeated reservation request reuse its original result, while **compensation** cancels only a booking created by an incomplete workflow. These mechanisms handle slow readers and uncertain requests while retaining the original user operations.
+
 ## 2. Results
 
 **89 tests passed on Windows Python 3.10.21 and 3.12.7** after the close-path and receipt-confirmation repair. All 178 executions passed with no failures, errors or skips, both runs record the same current source hashes, and the initial five tests remain. The [CI repair verification](reports/ci-repair-verification.json) links the complete local records. For automated cross-platform runs, see [GitHub Actions](https://github.com/Dongmyung378/Distributed-System/actions/workflows/ci.yml).
 
 The retained earlier source snapshot passed **85 tests in each of four environments**, totaling 340 executions without failures, errors or skips. Those verification reports and the following benchmarks remain historical records rather than measurements of the repaired source.
+
+**Loopback** measurements run the server and clients on the same computer. One broadcast creates an expected delivery for each intended receiver. **p95** summarises the slower end of measured message delays: about 95% are at or below that value. The median of trial-level p95 values summarises repeated trials, and must be read alongside completed deliveries to avoid treating an unfinished run as fast.
 
 With one stalled connection and three healthy receivers, each version completed three identical trials: **3 of 900 planned delivery observations initially, versus 900 of 900 after strengthening in every trial**. The initial writer attempted only 48 of 300 broadcasts and submitted 47, so incomplete observations are not a message-loss rate. Under 60 healthy connections the median trial-level p95 rose from **1.6338ms to 3.2020ms**. Resource measurements include the server and client harness together.
 
